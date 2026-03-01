@@ -1,6 +1,6 @@
 """Multi-phase agentic generator loop — produces demo files using tools.
 
-Phase 1 — RESEARCH  (3-5 iterations): web_search for CDN links, best practices, examples.
+Phase 1 — RESEARCH  (2-3 iterations): web_search for paper-specific info (results, repos, metadata).
 Phase 2 — BUILD     (up to max_iter):  write all files, implement logic, add interactivity.
 Phase 3 — POLISH    (up to 5 iters):   read-review-fix cycle for quality and correctness.
 Post    — VALIDATE  (up to 8 iters):   form-compliance check + auto-correction if needed.
@@ -396,52 +396,7 @@ def _correction_message(form: str, error: str) -> str:
 # Phase helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-_RESEARCH_QUERIES: dict[str, list[str]] = {
-    "app": [
-        "gradio 5 Blocks ChatInterface streaming best practices 2025",
-        "gradio 5 gr.Image gr.Audio gr.Textbox theme customization examples",
-        "huggingface transformers pipeline AutoModel from_pretrained device_map auto 2025",
-    ],
-    "presentation": [
-        # CDN URLs are pre-baked in FORM_SPECS — focus on paper-specific info
-        "research paper results tables figures official site arxiv",
-        "academic presentation slide deck best practices 2025 NeurIPS ICML",
-    ],
-    "website": [
-        "nerfies.github.io academic project page HTML structure 2025",
-        "distill.pub article layout CSS IntersectionObserver scroll animation",
-    ],
-    "flowchart": [
-        # Mermaid patterns are pre-baked — focus on paper-specific info
-        "paper algorithm architecture data pipeline computational graph overview",
-    ],
-    "slides": [
-        # python-pptx patterns are pre-baked — focus on paper-specific info
-        "paper official results tables figures numeric benchmarks comparison",
-        "python matplotlib architecture diagram visualization dark theme 2025",
-    ],
-    "latex": [
-        # LaTeX/Beamer patterns are pre-baked — focus on paper-specific info
-        "paper official results benchmark tables comparison baseline numbers",
-    ],
-    "app_streamlit": [
-        "streamlit app best practices dashboard data visualization 2025",
-        "streamlit cache_data cache_resource plotly chart examples",
-    ],
-    "page_readme": [
-        "papers with code github readme template badges shields.io 2025",
-    ],
-    "page_blog": [
-        "distill.pub template v2 d-article d-cite interactive article 2025",
-        "d3.js v7 interactive visualization embedded chart tutorial",
-    ],
-    "diagram_graphviz": [
-        "python graphviz library digraph subgraph cluster styling 2025",
-        "graphviz publication quality architecture diagram dark theme",
-    ],
-}
 
-# Skill-specific additional research queries (injected alongside form queries)
 _PDF_SURVEY_SCRIPT = """
 import re, sys, json
 try:
@@ -706,85 +661,64 @@ def _pre_extract_figures(output_dir: str, on_emit: Callable) -> str:
     return "\n".join(lines)
 
 
-_SKILL_RESEARCH_QUERIES: dict[str, list[str]] = {
-    "ModelInferenceSkill": [
-        "huggingface pipeline text-generation image-classification token-classification 2025",
-    ],
-    "DataExplorerSkill": [
-        "huggingface datasets streaming load_dataset split train 2025 pandas",
-    ],
-    "AlgorithmVisualizerSkill": [
-        "plotly animation frame slider python 2025 matplotlib FuncAnimation",
-    ],
-    "FindingsDashboardSkill": [
-        "Chart.js v4 bar chart grouped CDN 2025 responsive",
-    ],
-    "SurveyDashboardSkill": [
-        "vanilla JS sortable table filter search 2025 no framework",
-    ],
-    "TheoreticalExplainerSkill": [
-        # Patterns pre-baked — search for paper-specific content only
-        "paper official GitHub results figures author list venue year",
-    ],
-    "FlowchartGeneratorSkill": [
-        # Patterns pre-baked — search for paper-specific content only
-        "paper architecture overview pipeline components official repository",
-    ],
-    "FrameworkTutorialSkill": [
-        "Prism.js CDN syntax highlighting code copy button vanilla JS 2025",
-    ],
-    "GeneralQASkill": [
-        "anthropic python SDK stream_message 2025 yield chunks",
-    ],
-    "StreamlitDemoSkill": [
-        "streamlit 1.30 tabs columns sidebar cache_resource best practices 2025",
-    ],
-    "ReadmeGeneratorSkill": [
-        "github readme shields.io badge mermaid diagram papers with code template",
-    ],
-    "BlogExplainerSkill": [
-        "distill.pub article template d-article d-figure d-cite interactive 2025",
-    ],
-    "GraphvizDiagramSkill": [
-        "python graphviz digraph subgraph render SVG dark theme architecture 2025",
-    ],
-}
+def _extract_prior_work(paper) -> str:
+    """Extract references to foundational prior work from the paper text."""
+    # Look for related work / background sections
+    related_sections = []
+    for name, content in (paper.sections or {}).items():
+        lower = name.lower()
+        if any(kw in lower for kw in ("related", "background", "prior", "previous", "foundation")):
+            related_sections.append(content[:2000])
+    # Fallback: check abstract for "builds on", "extends", "based on" patterns
+    if not related_sections and paper.abstract:
+        related_sections.append(paper.abstract)
+    return "\n".join(related_sections)[:3000]
 
 
 def _run_research_phase(
     provider: BaseLLMProvider,
-    form: str,
-    paper_title: str,
+    paper,
     output_dir: str,
     use_openai_fmt: bool,
     on_emit: Callable,
-    max_iter: int = 4,
-    skill_name: str = "",
+    max_iter: int = 3,
 ) -> str:
-    """Phase 1: search for best CDN links, libraries, and examples."""
-    queries = list(_RESEARCH_QUERIES.get(form, ["best web demo libraries 2025"]))
-    queries += _SKILL_RESEARCH_QUERIES.get(skill_name, [])
+    """Phase 1: find official resources + foundational prior work context."""
+    prior_work_text = _extract_prior_work(paper)
+    arxiv_hint = f" (arXiv: {paper.arxiv_id})" if paper.arxiv_id else ""
+
     system = (
-        f"You are a senior technical researcher. Your ONLY job right now is to find the best, "
-        f"most current CDN links, API patterns, and code examples for building a '{form}' demo "
-        f"for the paper: \"{paper_title}\". "
-        f"Use web_search to look up REAL information. Report ONLY:\n"
-        f"  1. Exact CDN URLs with version numbers (copy-paste ready)\n"
-        f"  2. Minimal working code snippets showing key API patterns\n"
-        f"  3. Any gotchas or version-specific notes\n"
-        f"DO NOT write any demo code or produce any files yet."
+        f"You are a research assistant. Your job is to gather context about the paper "
+        f"\"{paper.title}\"{arxiv_hint} by searching the web. You have TWO tasks:\n\n"
+        f"TASK 1 — OFFICIAL RESOURCES: Find the paper's GitHub repository, project page, "
+        f"HuggingFace model/dataset, and arXiv page. One or two web_search calls should suffice.\n\n"
+        f"TASK 2 — FOUNDATIONAL PRIOR WORK: Based on the paper's related work (provided below), "
+        f"identify the 1-3 most important predecessor papers that this work builds on. "
+        f"Search for those papers to get a brief summary of what they do — this helps the demo "
+        f"builder understand the bigger picture.\n\n"
+        f"DO NOT search for library docs, CDN URLs, or code examples — those are pre-baked.\n"
+        f"DO NOT write any files."
     )
-    initial = (
-        f"Research the best tools, CDN links, and code patterns for building a '{form}' demo "
-        f"for: \"{paper_title}\".\n\n"
-        f"Run web_search for each of these queries:\n"
-        + "\n".join(f"  - {q}" for q in queries)
-        + "\n\nReport all findings as a structured list:\n"
-        f"  - CDN URLs (exact, versioned)\n"
-        f"  - Key API calls with syntax examples\n"
-        f"  - Configuration gotchas\n"
-        f"  - Best practices for this specific form and paper topic."
+
+    initial_parts = [
+        f"Research the paper: \"{paper.title}\"{arxiv_hint}\n",
+        "STEP 1: Search for the paper's official resources (GitHub, project page, HuggingFace, arXiv).",
+        "STEP 2: Read the prior work excerpt below and identify 1-3 key foundational papers. "
+        "Search for those to summarize what they contribute and how this paper builds on them.\n",
+    ]
+    if prior_work_text:
+        initial_parts.append(f"─── PRIOR WORK EXCERPT ───\n{prior_work_text}\n─── END EXCERPT ───\n")
+    else:
+        initial_parts.append(
+            f"No related-work section was extracted. Use the abstract to infer key prior work:\n"
+            f"{paper.abstract[:1500]}\n"
+        )
+    initial_parts.append(
+        "Report your findings as:\n"
+        "  - OFFICIAL LINKS: arXiv, GitHub, project page, HuggingFace (if any)\n"
+        "  - FOUNDATIONAL PAPERS: for each, one sentence on what it does and how this paper extends it"
     )
+    initial = "\n".join(initial_parts)
 
     messages: list[dict] = [{"role": "user", "content": initial}]
     findings: list[str] = []
@@ -819,6 +753,10 @@ def _run_research_phase(
     return "\n\n".join(findings)
 
 
+_SEARCH_TOOL_NAMES = {"web_search", "search_huggingface"}
+_MAX_SEARCH_ONLY_ITERS = 2  # after this many consecutive search-only iters, force writing
+
+
 def _run_loop(
     provider: BaseLLMProvider,
     messages: list,
@@ -830,10 +768,14 @@ def _run_loop(
     phase_label: str = "",
 ) -> list:
     """Run a generic agentic loop; returns the updated messages list."""
+    is_build = phase_label.startswith("build")
+    search_only_iters = 0  # consecutive iters with only search calls, no write_file
+    consecutive_write_failures = 0  # consecutive iters where write_file failed
+
     for iteration in range(max_iter):
         on_emit(f"  [{phase_label}iter {iteration + 1}] calling model...\n")
         response = _chat_with_retry(
-            provider, messages, system, TOOLS, 8192, on_emit
+            provider, messages, system, TOOLS, 16384, on_emit
         )
 
         if response.content:
@@ -870,6 +812,17 @@ def _run_loop(
         else:
             messages.append(_anthropic_assistant_message(response))
 
+        # Track whether this iteration is search-only (build phase only)
+        tool_names = {tc.name for tc in response.tool_calls}
+        has_write = "write_file" in tool_names
+        all_search = tool_names.issubset(_SEARCH_TOOL_NAMES)
+
+        if is_build and all_search and not has_write:
+            search_only_iters += 1
+        else:
+            search_only_iters = 0
+
+        write_failed_this_iter = False
         for tc in response.tool_calls:
             on_emit(f"\n  ◆ {tc.name}({', '.join(list(tc.arguments.keys())[:3])})\n")
             result = dispatch_tool(tc.name, tc.arguments, output_dir)
@@ -878,6 +831,43 @@ def _run_loop(
                 messages.append(_openai_tool_result_message(tc, result))
             else:
                 messages.append(_anthropic_tool_result_message(tc, result))
+            if tc.name == "write_file" and "Missing required argument" in result:
+                write_failed_this_iter = True
+
+        # Track consecutive write_file failures (typically from max_tokens truncation)
+        if write_failed_this_iter:
+            consecutive_write_failures += 1
+        else:
+            consecutive_write_failures = 0
+
+        # After repeated write_file failures, tell the model to split the file
+        if consecutive_write_failures >= 2:
+            nudge = (
+                "Your write_file calls are failing because the content is too large and gets truncated. "
+                "SPLIT your approach: first write a skeleton version of the file with placeholder sections, "
+                "then use additional write_file calls to overwrite with the complete content. "
+                "Alternatively, break the content into a main file and separate helper files (e.g. styles.css, script.js). "
+                "Do NOT attempt to write the entire file in one massive call again."
+            )
+            on_emit(f"  ↻ write_file failed {consecutive_write_failures}x — advising split strategy\n")
+            messages.append({"role": "user", "content": nudge})
+            consecutive_write_failures = 0
+
+        # After too many consecutive search-only iters, force the model to write
+        if is_build and search_only_iters >= _MAX_SEARCH_ONLY_ITERS:
+            spec = FORM_SPECS.get(
+                phase_label.replace("build-", "").replace("build", "") or "website", {}
+            )
+            main = spec.get("main_file", "index.html")
+            nudge = (
+                "STOP SEARCHING. You have spent too many iterations on web_search without writing any files. "
+                "The Research phase already gathered what you need — those findings are in your context above. "
+                f"You MUST use write_file to create {main!r} RIGHT NOW in this next response. "
+                "Write the complete file content in a single write_file call. No more web_search calls."
+            )
+            on_emit(f"  ↻ Search limit hit ({search_only_iters} consecutive) — forcing write\n")
+            messages.append({"role": "user", "content": nudge})
+            search_only_iters = 0  # reset so we don't nudge every iteration
     else:
         on_emit(f"  [{phase_label}] max iterations reached.\n")
 
@@ -903,7 +893,7 @@ def generate(
     Run the multi-phase agentic generation loop.
 
     Phases:
-      1. Research  — search for CDN links and best practices (3-4 iters)
+      1. Research  — find official links + foundational prior work (2-3 iters)
       2. Build     — write all demo files (up to max_iter - 8 iters)
       3. Polish    — read-review-fix quality pass (up to 5 iters)
       (post) Validate — form compliance check + auto-correction if needed
@@ -933,13 +923,11 @@ def generate(
         _emit("━━ Phase 1 / 3 — Research ━━\n")
         research_notes = _run_research_phase(
             provider=provider,
-            form=form,
-            paper_title=paper.title,
+            paper=paper,
             output_dir=output_dir,
             use_openai_fmt=use_oai,
             on_emit=_emit,
-            max_iter=max(2, min(4, max_iter // 5)),
-            skill_name=skill.name,
+            max_iter=max(2, min(3, max_iter // 6)),
         )
 
         # ── Phase 1b: Figure Pre-extraction (forms that embed PDF figures) ───
@@ -956,15 +944,15 @@ def generate(
         initial = skill.get_initial_message(paper, analysis, form, dtype)
         if research_notes.strip():
             initial += (
-                "\n\n─── RESEARCH FINDINGS (Phase 1) — USE THESE EXACT RESOURCES ───\n"
-                + research_notes[:4000]
+                "\n\n─── RESEARCH FINDINGS (Phase 1) — OFFICIAL LINKS & PRIOR WORK CONTEXT ───\n"
+                + research_notes[:12000]
                 + "\n─── END RESEARCH ───"
             )
         if pdf_survey:
             initial += pdf_survey
 
         messages: list[dict] = [{"role": "user", "content": initial}]
-        build_iters = max(4, max_iter - 9)  # reserve 5 for polish, ~4 for research
+        build_iters = max(4, max_iter - 8)  # reserve 5 for polish, ~3 for research
         messages = _run_loop(
             provider=provider,
             messages=messages,

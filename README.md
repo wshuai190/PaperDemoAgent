@@ -48,7 +48,7 @@ pipx run paper-demo-agent ui
 |---|---|---|
 | 🧠 | **Smart Routing** | AI reads the paper and picks the best demo type — model inference, data explorer, slides, diagram, and more |
 | 📦 | **10 Output Formats** | Gradio apps, Streamlit dashboards, reveal.js slides, PowerPoint, LaTeX/Beamer, project pages, blog articles, READMEs, Mermaid flowcharts, Graphviz diagrams |
-| 🤖 | **Multi-Phase Agent** | 4-phase pipeline (Research → Build → Polish → Validate) with tool use, web search, and self-correction |
+| 🤖 | **Multi-Phase Agent** | 4-phase pipeline (Research → Build → Polish → Validate) with tool use, prior-work analysis, and self-correction |
 | 🔌 | **6 LLM Providers** | Anthropic, OpenAI, Google Gemini, DeepSeek, Qwen, MiniMax — switch with one flag |
 | 🔑 | **Zero-Config Auth** | Auto-detects keys from Claude Code, OpenAI Codex CLI, Aider, gcloud ADC, and environment variables |
 | 📄 | **Any Input** | arXiv ID, arXiv URL, any URL, local PDF, or raw text |
@@ -77,7 +77,7 @@ flowchart LR
 1. **Parse** — Fetches the paper from arXiv, URL, or local PDF. Extracts title, abstract, full text, and figures.
 2. **Analyze** — AI classifies the paper type (model, dataset, algorithm, framework, survey, theory, empirical) and recommends the best output format.
 3. **Route** — Maps paper type + user preferences to one of 15 specialized skills.
-4. **Research** — Searches the web for paper-specific information (results, benchmarks, figures) — not library docs (those are pre-baked in the skill prompts).
+4. **Research** — Finds the paper's official resources (GitHub, HuggingFace, project page) and identifies foundational prior work to give the build agent a bigger picture. Library docs are pre-baked in the skill prompts.
 5. **Build** — Multi-iteration code generation with 7 tools (write_file, read_file, list_files, web_search, run_python, extract_pdf_page, execute_command).
 6. **Polish** — Quality review pass with skill-specific checklists.
 7. **Validate** — Form-compliance check ensures the output matches the requested format, with auto-correction if needed.
@@ -331,7 +331,7 @@ paper_demo_agent/
 │   ├── general_qa.py
 │   └── ...
 └── generation/           # Multi-phase generator + tool definitions
-    ├── generator.py      # 4-phase pipeline (Research → Build → Polish → Validate)
+    ├── generator.py      # 4-phase pipeline (Research → Build → Polish → Validate) + prior-work analysis
     ├── tools.py          # 7 agent tools (write_file, read_file, web_search, ...)
     └── runner.py         # Demo launcher (open in browser / run app server)
 ```

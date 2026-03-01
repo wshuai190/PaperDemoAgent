@@ -164,7 +164,7 @@ class TestMessageFormats:
         gradio_content = "import gradio as gr\napp = gr.Interface(lambda x: x, 'text', 'text')\napp.launch()"
         # Phase order: research(1 call end_turn) → build(write_file then end_turn) → polish(end_turn)
         responses = [
-            LLMResponse(content="Research: found CDN links.", tool_calls=[], stop_reason="end_turn"),
+            LLMResponse(content="Research: found GitHub repo and prior work.", tool_calls=[], stop_reason="end_turn"),
             LLMResponse(content="Writing.", tool_calls=[
                 ToolCall(id="c1", name="write_file", arguments={"path": "app.py", "content": gradio_content})
             ], stop_reason="tool_use"),
