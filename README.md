@@ -9,8 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Downloads](https://img.shields.io/pypi/dm/paper-demo-agent.svg)](https://pypi.org/project/paper-demo-agent/)
 
-<!-- TODO: Replace with actual terminal recording (VHS/Terminalizer) -->
-<!-- ![Paper Demo Agent](docs/assets/hero.gif) -->
+![Paper Demo Agent UI](docs/assets/ui-screenshot.png)
 
 [Quick Start](#quick-start) · [Features](#features) · [Output Formats](#output-formats) · [Providers](#supported-providers) · [CLI Reference](#cli-reference) · [Python API](#python-api)
 
@@ -115,13 +114,12 @@ flowchart LR
 | **Mermaid Flowchart** | Mermaid.js v11 (ESM) | Interactive architecture diagrams, step-by-step walkthroughs |
 | **Graphviz Diagram** | Python graphviz | Publication-quality SVG/PNG architecture diagrams |
 
-<!-- TODO: Add output screenshots
 ### Gallery
 
-| Gradio App | reveal.js Slides | Project Page | Mermaid Diagram |
+| Interactive Diagram | reveal.js Presentation | Project Website | Gradio App |
 |---|---|---|---|
-| ![App](docs/assets/output-app.png) | ![Slides](docs/assets/output-slides.png) | ![Page](docs/assets/output-page.png) | ![Diagram](docs/assets/output-diagram.png) |
--->
+| ![Diagram](docs/assets/output-diagram.png) | ![Presentation](docs/assets/output-presentation.png) | ![Website](docs/assets/output-website.png) | ![App](docs/assets/output-app.png) |
+| ResNet — Mermaid flowchart | Attention — HTML slides | Attention — project page | BERT — Gradio demo |
 
 ---
 
@@ -327,7 +325,7 @@ paper_demo_agent/
 ## Development
 
 ```bash
-git clone https://github.com/paper-demo-agent/paper-demo-agent
+git clone https://github.com/wshuai190/PaperDemoAgent
 cd paper-demo-agent
 pip install -e ".[dev]"
 pytest tests/
@@ -353,6 +351,6 @@ MIT — see [LICENSE](LICENSE)
 
 **If Paper Demo Agent saved you time, give it a star!**
 
-[![Star on GitHub](https://img.shields.io/github/stars/paper-demo-agent/paper-demo-agent?style=social)](https://github.com/paper-demo-agent/paper-demo-agent)
+[![Star on GitHub](https://img.shields.io/github/stars/wshuai190/PaperDemoAgent?style=social)](https://github.com/wshuai190/PaperDemoAgent)
 
 </div>
