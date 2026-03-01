@@ -1,0 +1,106 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" width="720" height="520">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&amp;display=swap');
+    .term { font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+    .cursor { animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+  </style>
+  <!-- Background -->
+  <rect width="720" height="520" rx="12" fill="#09090b"/>
+  <!-- Title bar -->
+  <rect width="720" height="36" rx="12" fill="#111113"/>
+  <rect y="24" width="720" height="12" fill="#111113"/>
+  <circle cx="18" cy="18" r="6" fill="#ef4444" opacity="0.8"/>
+  <circle cx="38" cy="18" r="6" fill="#f59e0b" opacity="0.8"/>
+  <circle cx="58" cy="18" r="6" fill="#22c55e" opacity="0.8"/>
+  <text x="360" y="22" text-anchor="middle" class="term" fill="#71717a" font-size="12">paper-demo-agent</text>
+  <line x1="0" y1="36" x2="720" y2="36" stroke="#27272a"/>
+
+  <text x="20" y="56" class="term" fill="#6366f1" opacity="0">
+    $ 
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="0.0s" fill="freeze"/>
+  </text>
+  <text x="20" y="74" class="term" fill="#fafafa" opacity="0">
+    pip install paper-demo-agent
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="0.2s" fill="freeze"/>
+  </text>
+  <text x="20" y="92" class="term" fill="#22c55e" opacity="0">
+    Successfully installed paper-demo-agent-0.3.0
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="1.5s" fill="freeze"/>
+  </text>
+  <text x="20" y="128" class="term" fill="#6366f1" opacity="0">
+    $ 
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="2.7s" fill="freeze"/>
+  </text>
+  <text x="20" y="146" class="term" fill="#fafafa" opacity="0">
+    paper-demo-agent demo 1706.03762 --form presentation
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="2.9s" fill="freeze"/>
+  </text>
+  <text x="20" y="164" class="term" fill="#6366f1" opacity="0">
+    ╭─ 🔬 Paper Demo Agent ─────────────────────────╮
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="4.5s" fill="freeze"/>
+  </text>
+  <text x="20" y="182" class="term" fill="#a1a1aa" opacity="0">
+    │ Source: 1706.03762  Provider: anthropic       │
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="4.7s" fill="freeze"/>
+  </text>
+  <text x="20" y="200" class="term" fill="#a1a1aa" opacity="0">
+    │ Form: presentation  Model: claude-sonnet-4-6  │
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="4.9s" fill="freeze"/>
+  </text>
+  <text x="20" y="218" class="term" fill="#6366f1" opacity="0">
+    ╰──────────────────────────────────────────────╯
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="5.1s" fill="freeze"/>
+  </text>
+  <text x="20" y="236" class="term" fill="#a1a1aa" opacity="0">
+    Fetching paper: 1706.03762
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="5.5s" fill="freeze"/>
+  </text>
+  <text x="20" y="254" class="term" fill="#fafafa" opacity="0">
+    Paper: &quot;Attention Is All You Need&quot;
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="6.5s" fill="freeze"/>
+  </text>
+  <text x="20" y="272" class="term" fill="#f59e0b" opacity="0">
+    Paper type: theory → presentation / theoretical
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="7.0s" fill="freeze"/>
+  </text>
+  <text x="20" y="308" class="term" fill="#3b82f6" opacity="0">
+    ▸ Research   ████████████████████ done (3 iters)
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="8.0s" fill="freeze"/>
+  </text>
+  <text x="20" y="326" class="term" fill="#6366f1" opacity="0">
+    ▸ Build      ████████████████████ done (12 iters)
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="9.0s" fill="freeze"/>
+  </text>
+  <text x="20" y="344" class="term" fill="#a1a1aa" opacity="0">
+      → wrote demo.html (17 slides, 3 SVG diagrams)
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="10.5s" fill="freeze"/>
+  </text>
+  <text x="20" y="362" class="term" fill="#8b5cf6" opacity="0">
+    ▸ Polish     ████████████████████ done
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="11.0s" fill="freeze"/>
+  </text>
+  <text x="20" y="380" class="term" fill="#22c55e" opacity="0">
+    ▸ Validate   ████████████████████ ✓ valid
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="11.5s" fill="freeze"/>
+  </text>
+  <text x="20" y="416" class="term" fill="#22c55e" opacity="0">
+    ✅ Demo generated!
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="12.5s" fill="freeze"/>
+  </text>
+  <text x="20" y="434" class="term" fill="#fafafa" opacity="0">
+       Output: demos/attention_is_all_you_need/
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="12.7s" fill="freeze"/>
+  </text>
+  <text x="20" y="452" class="term" fill="#fafafa" opacity="0">
+       Main:   demo.html
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="12.9s" fill="freeze"/>
+  </text>
+  <text x="20" y="470" class="term" fill="#a1a1aa" opacity="0">
+       Run:    open demo.html
+    <animate attributeName="opacity" from="0" to="1" dur="0.3s" begin="13.1s" fill="freeze"/>
+  </text>
+  <rect x="20" y="494" width="8" height="16" fill="#6366f1" class="cursor" opacity="0">
+    <animate attributeName="opacity" from="0" to="1" dur="0.1s" begin="13.6s" fill="freeze"/>
+  </rect>
+</svg>

@@ -9,6 +9,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Downloads](https://img.shields.io/pypi/dm/paper-demo-agent.svg)](https://pypi.org/project/paper-demo-agent/)
 
+![Paper Demo Agent Demo](docs/assets/demo.svg)
+
 ![Paper Demo Agent UI](docs/assets/ui-screenshot.png)
 
 [Quick Start](#quick-start) · [Features](#features) · [Output Formats](#output-formats) · [Providers](#supported-providers) · [CLI Reference](#cli-reference) · [Python API](#python-api)
@@ -120,6 +122,20 @@ flowchart LR
 |---|---|---|---|
 | ![Diagram](docs/assets/output-diagram.png) | ![Presentation](docs/assets/output-presentation.png) | ![Website](docs/assets/output-website.png) | ![App](docs/assets/output-app.png) |
 | ResNet — Mermaid flowchart | Attention — HTML slides | Attention — project page | BERT — Gradio demo |
+
+<details>
+<summary><strong>Made with Paper Demo Agent</strong> — community showcase</summary>
+
+| Paper | arXiv | Format | Command |
+|-------|-------|--------|---------|
+| Attention Is All You Need | [1706.03762](https://arxiv.org/abs/1706.03762) | Presentation | `paper-demo-agent demo 1706.03762 --form presentation` |
+| Attention Is All You Need | [1706.03762](https://arxiv.org/abs/1706.03762) | Project Page | `paper-demo-agent demo 1706.03762 --form page` |
+| Deep Residual Learning | [1512.03385](https://arxiv.org/abs/1512.03385) | Flowchart | `paper-demo-agent demo 1512.03385 --form diagram` |
+| BERT | [1810.04805](https://arxiv.org/abs/1810.04805) | Gradio App | `paper-demo-agent demo 1810.04805 --form app` |
+
+**Want to add yours?** Open an [issue](https://github.com/wshuai190/PaperDemoAgent/issues) with the title `[Gallery] Paper Name — format` and a screenshot!
+
+</details>
 
 ---
 
@@ -333,11 +349,12 @@ pytest tests/
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or PR.
+Contributions are welcome! See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide.
 
 - **Bug reports** — include the arXiv ID and provider used
 - **New skills** — subclass `BaseSkill` and register in the router
 - **New providers** — subclass `BaseLLMProvider` and add to `factory.py`
+- **Gallery submissions** — generated a great demo? Open an issue with a screenshot!
 
 ---
 
