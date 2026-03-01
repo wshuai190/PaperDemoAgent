@@ -1057,8 +1057,7 @@ def _save_key(name: str, value: str) -> str:
         return f"✗ Empty value — nothing saved."
     try:
         key_manager.set(name.upper(), value.strip())
-        masked = value.strip()[:8] + "..." if len(value.strip()) > 8 else value.strip()
-        return f"✓ {name.upper()} saved ({masked})"
+        return f"✓ {name.upper()} saved (••••••••)"
     except Exception as exc:
         return f"✗ Error: {exc}"
 
@@ -1120,16 +1119,14 @@ def _tool_detect_html() -> str:
     # Claude Code → ANTHROPIC_API_KEY
     token = key_manager.detect_claude_code()
     if token:
-        masked = token[:8] + "…"
-        rows.append(("Claude Code", "~/.claude/.credentials.json", "ANTHROPIC_API_KEY", masked, True))
+        rows.append(("Claude Code", "~/.claude/.credentials.json", "ANTHROPIC_API_KEY", "••••••••", True))
     else:
         rows.append(("Claude Code", "~/.claude/.credentials.json", "ANTHROPIC_API_KEY", None, False))
 
     # OpenAI Codex → OPENAI_API_KEY
     key = key_manager.detect_openai_codex()
     if key:
-        masked = key[:8] + "…"
-        rows.append(("OpenAI Codex CLI", "~/.codex/auth.json", "OPENAI_API_KEY", masked, True))
+        rows.append(("OpenAI Codex CLI", "~/.codex/auth.json", "OPENAI_API_KEY", "••••••••", True))
     else:
         rows.append(("OpenAI Codex CLI", "~/.codex/auth.json", "OPENAI_API_KEY", None, False))
 
@@ -1137,8 +1134,7 @@ def _tool_detect_html() -> str:
     aider_keys = key_manager.detect_aider()
     if aider_keys:
         for env_name, val in aider_keys.items():
-            masked = val[:8] + "…" if val else None
-            rows.append(("Aider", "~/.aider.conf.yml", env_name, masked, bool(val)))
+            rows.append(("Aider", "~/.aider.conf.yml", env_name, "••••••••" if val else None, bool(val)))
     else:
         rows.append(("Aider", "~/.aider.conf.yml", "ANTHROPIC/OPENAI keys", None, False))
 

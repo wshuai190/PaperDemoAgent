@@ -13,7 +13,7 @@ class KeyManager:
 
     KEY_DESCRIPTIONS = {
         "ANTHROPIC_API_KEY": "Anthropic (Claude)",
-        "OPENAI_API_KEY": "OpenAI (GPT-4o)",
+        "OPENAI_API_KEY": "OpenAI (GPT)",
         "GOOGLE_API_KEY": "Google (Gemini)",
         "DEEPSEEK_API_KEY": "DeepSeek",
         "QWEN_API_KEY": "Qwen (Alibaba)",
@@ -166,7 +166,7 @@ class KeyManager:
         result = {}
         for key_name, label in self.KEY_DESCRIPTIONS.items():
             val, source = self.get_with_source(key_name)
-            masked = val[:8] + "…" if val and len(val) > 8 else (val or "")
+            masked = "••••••••" if val else ""
             result[key_name] = {"label": label, "value": val, "masked": masked, "source": source}
         # Special case: Gemini can use ADC even without a key
         if not result["GOOGLE_API_KEY"]["value"] and self.detect_gemini_adc():

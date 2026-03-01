@@ -68,7 +68,7 @@ def get_all_keys() -> dict:
         config_val = config.get(name)
         value = env_val or config_val
         if value:
-            result[name] = value[:8] + "..." if len(value) > 8 else "***"
+            result[name] = "••••••••"
         else:
             result[name] = None
     return result
