@@ -120,7 +120,7 @@ flowchart LR
 
 | Interactive Diagram | reveal.js Presentation | Project Website | Gradio App |
 |---|---|---|---|
-| ![Diagram](docs/assets/output-diagram.png) | ![Presentation](docs/assets/output-presentation.png) | ![Website](docs/assets/output-website.png) | ![App](docs/assets/output-app.png) |
+| ![Diagram](docs/assets/output-diagram.svg) | ![Presentation](docs/assets/output-presentation.svg) | ![Website](docs/assets/output-website.svg) | ![App](docs/assets/output-app.svg) |
 | ResNet — Mermaid flowchart | Attention — HTML slides | Attention — project page | BERT — Gradio demo |
 
 <details>
