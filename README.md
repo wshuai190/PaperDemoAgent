@@ -11,7 +11,7 @@
 
 ![Paper Demo Agent Demo](docs/assets/demo.svg)
 
-![Paper Demo Agent UI](docs/assets/ui-screenshot.png)
+![Paper Demo Agent UI](docs/assets/ui-screenshot.svg)
 
 [Quick Start](#quick-start) · [Features](#features) · [Output Formats](#output-formats) · [Providers](#supported-providers) · [CLI Reference](#cli-reference) · [Python API](#python-api)
 
