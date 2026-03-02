@@ -2,10 +2,11 @@
 
 Phase 1 — RESEARCH  (2-3 iterations): web_search for paper-specific info (results, repos, metadata).
 Phase 2 — BUILD     (up to max_iter):  write all files, implement logic, add interactivity.
-Phase 3 — POLISH    (up to 5 iters):   read-review-fix cycle for quality and correctness.
+Phase 3 — POLISH    (up to 3 iters):   read-review-fix cycle for quality and correctness.
 Post    — VALIDATE  (up to 8 iters):   form-compliance check + auto-correction if needed.
 """
 
+import base64
 import json
 import os
 import re
@@ -516,13 +517,186 @@ def _run_pdf_survey(output_dir: str, on_emit: Callable) -> str:
     )
 
 
-def _pre_extract_figures(output_dir: str, on_emit: Callable) -> str:
+# ---------------------------------------------------------------------------
+# Figure extraction helpers — Docling (primary) + heuristic fallback
+# ---------------------------------------------------------------------------
+
+import threading
+
+# Module-level Docling preloader — starts loading the heavy model in the
+# background so it's warm by the time we need it for figure extraction.
+_docling_converter = None      # will hold the DocumentConverter once ready
+_docling_lock = threading.Lock()
+_docling_preload_done = threading.Event()
+
+
+def _preload_docling() -> None:
+    """Load the Docling converter in a background thread (call once)."""
+    global _docling_converter
+    try:
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
+
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.images_scale = 2.0
+        pipeline_options.generate_picture_images = True
+
+        with _docling_lock:
+            _docling_converter = DocumentConverter(
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(
+                        pipeline_options=pipeline_options,
+                    ),
+                }
+            )
+    except Exception:
+        pass  # docling not installed — _docling_converter stays None
+    finally:
+        _docling_preload_done.set()
+
+
+def start_docling_preload() -> None:
+    """Kick off background preload (idempotent — safe to call multiple times)."""
+    if _docling_preload_done.is_set():
+        return  # already loaded or failed
+    t = threading.Thread(target=_preload_docling, daemon=True)
+    t.start()
+
+
+def _get_docling_converter(timeout: float = 120):
+    """Wait for the preloaded converter, or load inline if preload wasn't started."""
+    if not _docling_preload_done.is_set():
+        # Preload wasn't kicked off — load synchronously
+        _preload_docling()
+    else:
+        _docling_preload_done.wait(timeout=timeout)
+    return _docling_converter
+
+
+def _docling_extract(
+    pdf_path: str,
+    all_captions: dict,
+    figures_dir: "Path",
+    on_emit: Callable,
+) -> tuple:
+    """Use Docling's deep-learning layout model to extract figures and tables.
+
+    Returns (figures_list, tables_markdown_str).
+    """
+    from docling_core.types.doc import PictureItem, TableItem
+
+    converter = _get_docling_converter()
+    if converter is None:
+        raise RuntimeError("Docling converter not available")
+
+    conv_res = converter.convert(pdf_path)
+
+    # Build ordered list of figure captions for sequential matching
+    fig_cap_list: list[dict] = []
+    for _page_idx, caps in sorted(all_captions.items()):
+        fig_cap_list.extend(caps)
+
+    # ── Extract figures ───────────────────────────────────────────────
+    extracted: list[tuple] = []
+    pic_idx = 0
+    for element, _level in conv_res.document.iterate_items():
+        if not isinstance(element, PictureItem):
+            continue
+        pic_idx += 1
+        img = element.get_image(conv_res.document)
+        if img is None:
+            continue
+
+        fig_num = len(extracted) + 1
+        fname = f"fig{fig_num}.png"
+        img.save(str(figures_dir / fname), "PNG")
+
+        # Match with known caption (sequential — Docling order matches PDF order)
+        label = f"Figure {pic_idx}"
+        desc, page_num = "", 0
+        if pic_idx <= len(fig_cap_list):
+            c = fig_cap_list[pic_idx - 1]
+            label, desc = c["label"], c["desc"]
+
+        on_emit(f"  ↳ Extracted {fname}: {label} — {desc[:40]}\n")
+        extracted.append((fname, label, desc, page_num))
+
+    # ── Extract tables as structured markdown ─────────────────────────
+    table_lines: list[str] = []
+    tbl_idx = 0
+    for element, _level in conv_res.document.iterate_items():
+        if not isinstance(element, TableItem):
+            continue
+        tbl_idx += 1
+        try:
+            md = element.export_to_markdown()
+        except Exception:
+            continue
+        rows = md.strip().split("\n")
+        n_rows = len([r for r in rows if r.startswith("|")]) - 1  # minus separator
+        table_lines.append(f"\n### Table {tbl_idx} ({n_rows} data rows)")
+        table_lines.append(md.strip())
+
+    tables_md = "\n".join(table_lines) if table_lines else ""
+    if tables_md:
+        on_emit(f"  ↳ Extracted {tbl_idx} structured tables\n")
+
+    return extracted, tables_md
+
+
+def _heuristic_extract(
+    doc,
+    all_captions: dict,
+    figures_dir: "Path",
+    on_emit: Callable,
+) -> list:
+    """Fallback: extract figures using text-block and drawing heuristics."""
+    import fitz
+
+    extracted: list[tuple] = []
+
+    for page_idx, caps in sorted(all_captions.items()):
+        page = doc[page_idx]
+        ph, pw = page.rect.height, page.rect.width
+        page_top = ph * 0.04
+
+        for cap in sorted(caps, key=lambda c: c["y0"]):
+            label, desc = cap["label"], cap["desc"]
+
+            # Default: crop 25% of page height above caption, full width
+            min_crop = ph * 0.25
+            fig_top = max(page_top, cap["y0"] - min_crop)
+            y0 = max(0.0, (fig_top - 5) / ph)
+            y1 = min(1.0, (cap["y1"] + 8) / ph)
+
+            clip = fitz.Rect(0, y0 * ph, pw, y1 * ph)
+            mat = fitz.Matrix(200 / 72, 200 / 72)
+            pix = page.get_pixmap(matrix=mat, clip=clip)
+
+            img_bytes = pix.tobytes("png")
+            if len(img_bytes) < 5000:
+                pix = page.get_pixmap(matrix=mat)
+
+            fig_idx = len(extracted) + 1
+            fname = f"fig{fig_idx}.png"
+            pix.save(str(figures_dir / fname))
+
+            on_emit(f"  ↳ Extracted {fname}: {label} — {desc[:40]}\n")
+            extracted.append((fname, label, desc, page_idx + 1))
+
+    return extracted
+
+
+def _pre_extract_figures(
+    output_dir: str,
+    on_emit: Callable,
+    provider: Optional["BaseLLMProvider"] = None,
+) -> str:
     """Pre-extract all figures from paper.pdf before the Build phase.
 
-    Uses the same caption-based algorithm as the PDF survey to compute crops,
-    then immediately renders each figure region as a PNG file in figures/.
-    The agent can then reference figures/fig1.png, fig2.png, etc. directly
-    without needing to call extract_pdf_page at all.
+    Primary strategy: Docling deep-learning layout model (precise figure crops).
+    Fallback: heuristic text/drawing analysis (no extra dependencies).
 
     Returns a summary string listing all pre-extracted files.
     """
@@ -540,112 +714,63 @@ def _pre_extract_figures(output_dir: str, on_emit: Callable) -> str:
     figures_dir.mkdir(exist_ok=True)
 
     doc = fitz.open(str(pdf_path))
-    extracted = []   # list of (filename, label, desc, is_table)
-    tables = []      # list of (label, desc, page_num)
+
+    # ── Step 1: Scan all pages for figure/table captions ──────────────
+    all_captions: dict[int, list[dict]] = {}  # page_idx → caption list
+    tables: list[tuple] = []  # (label, desc, page_num)
 
     for i, page in enumerate(doc):
-        ph = page.rect.height
         blocks = sorted(page.get_text("blocks"), key=lambda b: b[1])
-
-        # Find captions; deduplicate by label
         captions = []
-        seen = set()
+        seen: set[str] = set()
         for blk in blocks:
             text = blk[4].strip().replace("\n", " ")
             m = re.match(
                 r'^(Fig(?:ure)?[\.\s]+\d+|Table[\s]+\d+)[:\.]?\s*(.{0,60})',
-                text, re.IGNORECASE
+                text, re.IGNORECASE,
             )
             if m:
                 lbl = m.group(1).strip()
                 if lbl not in seen:
                     seen.add(lbl)
-                    captions.append({'label': lbl, 'desc': m.group(2)[:60],
-                                     'y0': blk[1], 'y1': blk[3]})
+                    captions.append({"label": lbl, "desc": m.group(2)[:60],
+                                     "y0": blk[1], "y1": blk[3]})
+        if captions:
+            fig_caps = [c for c in captions if not c["label"].lower().startswith("table")]
+            tbl_caps = [c for c in captions if c["label"].lower().startswith("table")]
+            for tc in tbl_caps:
+                tables.append((tc["label"], tc["desc"], i + 1))
+            if fig_caps:
+                all_captions[i] = fig_caps
 
-        if not captions:
-            continue
+    if not all_captions and not tables:
+        doc.close()
+        return ""
 
-        # Build list of non-caption text blocks for finding figure boundaries
-        caption_y0s = {c['y0'] for c in captions}
-        body_blocks = [
-            b for b in blocks
-            if b[1] not in caption_y0s
-            and not re.match(r'^(Fig(?:ure)?[\.\s]+\d+|Table[\s]+\d+)',
-                             b[4].strip(), re.IGNORECASE)
-        ]
+    # ── Step 2: Try Docling deep-learning extraction ─────────────────
+    extracted: list[tuple] = []  # (filename, label, desc, page_num)
+    tables_md = ""  # structured table markdown from Docling
 
-        page_top = ph * 0.04  # top margin
-        prev_end = page_top
-
-        for cap in sorted(captions, key=lambda c: c['y0']):
-            label, desc = cap['label'], cap['desc']
-            is_table = label.lower().startswith('table')
-
-            if is_table:
-                tables.append((label, desc, i + 1))
-                prev_end = cap['y1']
-                continue
-
-            # In academic papers, figure images appear ABOVE their captions.
-            # Find the crop region:
-            #   top = bottom of the nearest body-text block above the caption
-            #         (or page top margin if none)
-            #   bottom = caption y1
-            fig_top = prev_end
-            for bb in body_blocks:
-                if bb[3] < cap['y0'] - 5:
-                    fig_top = bb[3]  # keep updating — last body block above caption
-                else:
-                    break
-
-            # If crop region is too small (< 12% of page), the figure is likely
-            # above the caption with no intervening text — extend upward
-            min_crop = ph * 0.12
-            if (cap['y1'] - fig_top) < min_crop:
-                fig_top = max(page_top, cap['y0'] - min_crop)
-
-            y0 = max(0.0, (fig_top - 3) / ph)
-            y1 = min(1.0, (cap['y1'] + 5) / ph)
-            pw = page.rect.width
-
-            # Render this region at 150 DPI
-            clip = fitz.Rect(0, y0 * ph, pw, y1 * ph)
-            mat = fitz.Matrix(150 / 72, 150 / 72)
-            pix = page.get_pixmap(matrix=mat, clip=clip)
-
-            # Skip if the extracted image is suspiciously small (< 5 KB)
-            img_bytes = pix.tobytes("png")
-            if len(img_bytes) < 5000:
-                # Fallback: extract the full page instead
-                full_mat = fitz.Matrix(150 / 72, 150 / 72)
-                pix = page.get_pixmap(matrix=full_mat)
-
-            # Save as figN.png (N = extracted count + 1)
-            fig_idx = len(extracted) + 1
-            fname = f"fig{fig_idx}.png"
-            fpath = figures_dir / fname
-            pix.save(str(fpath))
-
-            on_emit(f"  ↳ Extracted {fname}: {label} — {desc[:40]}\n")
-            extracted.append((fname, label, desc, i + 1))
-            prev_end = cap['y1']
+    if all_captions:
+        try:
+            on_emit("  ↳ Using Docling layout model for precise figure extraction\n")
+            extracted, tables_md = _docling_extract(
+                str(pdf_path), all_captions, figures_dir, on_emit,
+            )
+        except Exception as exc:
+            on_emit(f"  ↳ Docling unavailable ({exc}), using heuristic fallback\n")
+            extracted = _heuristic_extract(doc, all_captions, figures_dir, on_emit)
 
     doc.close()
 
-    if not extracted and not tables:
+    if not extracted and not tables and not tables_md:
         return ""
 
     lines = ["\n\n─── PRE-EXTRACTED FIGURES (ready to use — do NOT call extract_pdf_page) ───"]
-    lines.append(f"All figures already saved to the figures/ directory:\n")
+    lines.append("All figures already saved to the figures/ directory:\n")
 
     for fname, label, desc, pgnum in extracted:
         lines.append(f"  figures/{fname}  ←  {label}: {desc[:50]}")
-
-    if tables:
-        lines.append("\nTABLES — reproduce these as code (do NOT embed as images):")
-        for label, desc, pgnum in tables:
-            lines.append(f"  Page {pgnum}: {label}: {desc[:60]}")
 
     lines.append("\nUSAGE:")
     lines.append("  LaTeX:   \\includegraphics[width=\\textwidth]{figures/fig1.png}")
@@ -655,8 +780,20 @@ def _pre_extract_figures(output_dir: str, on_emit: Callable) -> str:
     lines.append("  Every figN.png must appear somewhere — do not skip any figure without reason.")
     lines.append("  Assign each figure to the most relevant slide (results, method, architecture, etc.)")
     lines.append("\nDO NOT call extract_pdf_page() — figures are already extracted.")
-    lines.append("DO NOT embed table pages as images — reproduce tables as code.")
-    lines.append("─── END PRE-EXTRACTED FIGURES ───")
+
+    # ── Tables: inject structured data so the agent can hard-code values ──
+    if tables_md:
+        lines.append("\n─── STRUCTURED TABLE DATA (from paper — use these exact values) ───")
+        lines.append("Hard-code these numbers directly in your code. Do NOT parse the PDF at runtime.")
+        lines.append("Include only the 2-3 most important results tables in the presentation.")
+        lines.append(tables_md)
+        lines.append("─── END TABLE DATA ───")
+    elif tables:
+        lines.append("\nTABLES — reproduce these as code (do NOT embed as images):")
+        for label, desc, pgnum in tables:
+            lines.append(f"  Page {pgnum}: {label}: {desc[:60]}")
+
+    lines.append("\n─── END PRE-EXTRACTED CONTENT ───")
 
     return "\n".join(lines)
 
@@ -895,7 +1032,7 @@ def generate(
     Phases:
       1. Research  — find official links + foundational prior work (2-3 iters)
       2. Build     — write all demo files (up to max_iter - 8 iters)
-      3. Polish    — read-review-fix quality pass (up to 5 iters)
+      3. Polish    — read-review-fix quality pass (up to 3 iters)
       (post) Validate — form compliance check + auto-correction if needed
     """
     form  = demo_form or analysis.demo_form
@@ -918,6 +1055,11 @@ def generate(
     _emit(f"\nProvider : {provider.__class__.__name__} ({provider.model})\n")
     _emit(f"Skill    : {skill.name}  |  Form: {form}  |  Type: {dtype}\n\n")
 
+    # Start preloading the Docling model in the background so it's warm
+    # by the time we need it for figure extraction after the research phase.
+    if form in ("latex", "slides", "presentation", "page_blog"):
+        start_docling_preload()
+
     try:
         # ── Phase 1: Research ─────────────────────────────────────────────
         _emit("━━ Phase 1 / 3 — Research ━━\n")
@@ -934,7 +1076,7 @@ def generate(
         pdf_survey = ""
         if form in ("latex", "slides", "presentation", "page_blog"):
             _emit("\n━━ Phase 1b — Figure Pre-extraction ━━\n")
-            pdf_survey = _pre_extract_figures(output_dir, _emit)
+            pdf_survey = _pre_extract_figures(output_dir, _emit, provider=provider)
             if not pdf_survey:
                 # Fallback to text-only survey if PyMuPDF unavailable
                 pdf_survey = _run_pdf_survey(output_dir, _emit)
@@ -952,7 +1094,7 @@ def generate(
             initial += pdf_survey
 
         messages: list[dict] = [{"role": "user", "content": initial}]
-        build_iters = max(4, max_iter - 8)  # reserve 5 for polish, ~3 for research
+        build_iters = max(4, max_iter - 6)  # reserve 3 for polish, ~3 for research
         messages = _run_loop(
             provider=provider,
             messages=messages,
@@ -989,7 +1131,7 @@ def generate(
                 output_dir=output_dir,
                 use_openai_fmt=use_oai,
                 on_emit=_emit,
-                max_iter=5,
+                max_iter=3,
                 phase_label="polish-",
             )
 

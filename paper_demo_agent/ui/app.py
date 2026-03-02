@@ -1590,10 +1590,29 @@ def build_ui() -> gr.Blocks:
                                 scale=3,
                             )
 
-                        with gr.Accordion("Advanced", open=False):
+                        with gr.Accordion("Advanced — Budget & Iterations", open=False):
                             max_iter_sl = gr.Slider(
                                 minimum=8, maximum=60, value=25, step=1,
-                                label="Max agent iterations (Phase 2 budget)",
+                                label="Max agent iterations",
+                            )
+                            budget_info = gr.HTML(
+                                '<div style="font-size:12px;color:var(--pda-text2);margin:8px 0 4px;'
+                                'padding:10px 12px;background:var(--pda-surface);border-radius:8px;'
+                                'border:1px solid var(--pda-border)">'
+                                '<b style="color:var(--pda-text1)">Iteration budget breakdown</b><br>'
+                                '<span style="color:#a78bfa">Research</span>: ~2-3 iters '
+                                '(find official links + prior work)<br>'
+                                '<span style="color:#6366f1">Build</span>: ~19 iters '
+                                '(write demo files — the main budget)<br>'
+                                '<span style="color:#22c55e">Polish</span>: up to 3 iters '
+                                '(quality review)<br>'
+                                '<span style="color:#f59e0b">Validate</span>: up to 8 iters '
+                                '(only if format check fails)<br><br>'
+                                '<b style="color:var(--pda-text1)">Estimated cost per run</b><br>'
+                                '8 iters ≈ $0.05–0.15 · 25 iters ≈ $0.15–0.50 · 60 iters ≈ $0.40–1.20<br>'
+                                '<span style="font-size:11px">(varies by provider — '
+                                'Anthropic/OpenAI are pricier, DeepSeek/Qwen are cheaper)</span>'
+                                '</div>'
                             )
 
                         generate_btn = gr.Button(

@@ -166,7 +166,10 @@ if __name__ == '__main__':
 ```
 
 CRITICAL REQUIREMENTS:
-  - install_package graphviz (the Python library) before running build.py
+  - install_package graphviz (the Python library) before running build.py —
+    this also auto-installs the system-level Graphviz binary (dot) if missing.
+    If you still see graphviz.ExecutableNotFound, the system binary is not installed.
+    Fix: execute_python("import subprocess; subprocess.run(['brew','install','graphviz'],check=True)")
   - Every node must use actual terminology from the paper, not generic placeholders
   - Every cluster must have a label matching a paper section or module name
   - Edge labels describe what flows between components (tensor shape, data type, signal)

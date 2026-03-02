@@ -40,6 +40,28 @@ No `pip` needed (with pipx):
 pipx run paper-demo-agent ui
 ```
 
+### System Dependencies (optional)
+
+Most output formats are pure Python/HTML and need no extra setup. For **Graphviz diagrams** (`--form diagram --subtype graphviz`), the system-level Graphviz binary is required:
+
+```bash
+# macOS
+brew install graphviz
+
+# Ubuntu / Debian
+sudo apt-get install graphviz
+```
+
+For **LaTeX/Beamer** output (`--form presentation --subtype beamer`), a TeX distribution is needed:
+
+```bash
+# macOS
+brew install --cask mactex-no-gui
+
+# Ubuntu / Debian
+sudo apt-get install texlive-latex-recommended texlive-fonts-extra
+```
+
 ---
 
 ## Features

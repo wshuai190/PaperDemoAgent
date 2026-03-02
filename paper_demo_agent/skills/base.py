@@ -661,349 +661,206 @@ Target: Publication-quality ML architecture diagrams."""
         steps = {
             "app": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
-Step 1 ── RESEARCH
-  • Use web_search: find current Gradio 5 best practices, HF Space examples for this paper topic
+Step 1 ── FIND MODEL
   • Use search_huggingface: find official model/dataset on HuggingFace Hub
   • Note the model ID, license, and any required tokens
 
-Step 2 ── REQUIREMENTS
-  • Write requirements.txt FIRST with all dependencies and pinned versions
-  • Include: gradio>=5.0, torch/transformers (if applicable), numpy, etc.
-
-Step 3 ── SKELETON
-  • Write app.py: all imports, gr.Blocks() layout, tab structure, UI components
-  • Define all widgets, output areas, examples panel, about tab — placeholder logic OK here
-
-Step 4 ── CORE LOGIC
-  • Implement model loading (lazy-load on first call, not at import time)
-  • Implement inference function(s) with streaming (yield) for long operations
-  • Add gr.Progress() indicators; handle OOM, timeout, missing model errors with gr.Error()
-
-Step 5 ── UX POLISH
-  • Add gr.Examples() with >=3 realistic, click-to-run examples
-  • About tab: abstract, method summary, BibTeX, arXiv/GitHub links
+Step 2 ── WRITE app.py (ONE SHOT)
+  • Write the COMPLETE app.py in a single write_file call — all imports, layout, logic
+  • gr.Blocks(theme=gr.themes.Soft()) root, tabbed layout (Demo + About)
+  • Lazy-load model on first call (not at import time), streaming with yield
+  • gr.Examples() with >=3 realistic examples, error handling with gr.Error()
   • Custom CSS: Inter font, brand accent color, styled header
+  • About tab: abstract, method summary, BibTeX, arXiv/GitHub links
 
-Step 6 ── TEST
-  • execute_python: `import app` — must succeed with no errors
-  • Test core function with a simple input
-  • Verify requirements.txt lists every import used
-
-Step 7 ── README
-  • Write README.md as HuggingFace Space card (YAML front-matter + usage + citation)""",
+Step 3 ── REQUIREMENTS + README
+  • Write requirements.txt with all pinned dependencies
+  • Write README.md as HuggingFace Space card
+  • DONE — do NOT self-verify. Polish phase handles review.""",
 
             "presentation": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
-Step 1 ── RESEARCH
-  • web_search: find this paper's official results, key tables, figures, and author details
-  • DO NOT search for reveal.js CDN URLs — they are pre-baked in the form spec above
-
-Step 2 ── OUTLINE
+Step 1 ── PLAN
   • Plan every slide: title + 1-line content description
   • Sequence: Title → Motivation → Background → Method(x3) → Results(x2) → Demo → Comparison → Limits → Conclusion → Q&A
 
-Step 3 ── SCAFFOLD
-  • Write demo.html: CDN links, <head>, reveal.js structure, custom CSS color variables
-  • Define theme override (--r-background-color, --r-heading-color, --r-link-color, etc.)
+Step 2 ── WRITE demo.html (ONE SHOT)
+  • Write the COMPLETE demo.html in a single write_file call
+  • CDN links from form spec, custom CSS theme override, reveal.js structure
+  • Every slide: real paper content (no placeholders), <aside class='notes'> speaker notes
+  • >=3 inline SVG diagrams for method/architecture slides
+  • Icons: Font Awesome 6 CDN + cdn.simpleicons.org for ML logos — zero downloads
+  • Animations: data-auto-animate on related slides, class='fragment' on bullets
+  • Reveal.initialize() with all plugins: RevealHighlight, RevealMath.KaTeX, RevealNotes
 
-Step 4 ── CONTENT
-  • Fill every slide with real paper content — NO Lorem Ipsum or placeholder text
-  • Title slide: paper name, all authors, venue, year
-  • Every slide: add <aside class='notes'> with speaker notes
-
-Step 5 ── DIAGRAMS + ICONS
-  • Draw >=3 inline SVG diagrams for method/architecture slides
-  • Consistent colors, labeled arrows, font-size 14px minimum
-  • ICONS: Use Font Awesome 6 CDN (already in reveal.js head) — zero downloads needed
-    Examples: <i class="fa-solid fa-brain"></i>, <i class="fa-solid fa-database"></i>, <i class="fa-solid fa-gears"></i>
-    For ML brand logos: <img src="https://cdn.simpleicons.org/pytorch/ffffff" height="20">
-    DO NOT search flaticon.com — use Font Awesome classes directly
-
-Step 6 ── ANIMATIONS
-  • Add data-auto-animate to consecutive related slides
-  • Add class='fragment' to bullet items (never show all bullets at once)
-
-Step 7 ── POLISH
-  • read_file demo.html → check Reveal.initialize() includes all plugins
-  • Verify every CDN link; no slide has >5 bullets""",
+Step 3 ── DONE
+  • Do NOT read_file to verify. Do NOT web_search for CDN URLs. Polish phase handles review.""",
 
             "website": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
-Step 1 ── RESEARCH
-  • web_search: find the paper's official project page and author details
-  • Find exact author names, affiliations, venue, year, arXiv ID
+Step 1 ── PLAN
+  • Plan all sections: Hero, Abstract, Method, Results, Citation
+  • Note which sections need KaTeX, SVG, or JS animations
 
-Step 2 ── ARCHITECTURE
-  • Write a comment outline at the top of index.html listing all sections
-  • Plan which sections need KaTeX, which need SVG, which need JS animations
+Step 2 ── WRITE index.html (ONE SHOT)
+  • Write the COMPLETE index.html in a single write_file call
+  • <head>: CDN links from form spec (Inter, JetBrains Mono, KaTeX, Font Awesome 6)
+  • Full CSS: custom properties, dark theme, responsive grid, typography
+  • Hero: paper title, authors with affiliations, venue badge, action buttons
+  • Content: abstract (KaTeX for equations), method (SVG diagram), results (card grid, tables)
+  • Interactivity: IntersectionObserver scroll anims, BibTeX copy, dark/light toggle
+  • Responsive: @media queries for 320px, 768px, 1200px
+  • renderMathInElement() after DOM ready
+  • Icons: Font Awesome 6 classes + cdn.simpleicons.org for ML logos — zero downloads
 
-Step 3 ── FOUNDATION
-  • Write <head>: CDN links (Inter, JetBrains Mono, KaTeX), meta tags
-  • Write full CSS: custom properties, reset, typography (Inter -0.02em headings, 1.65 body), dark mode, responsive grid
-
-Step 4 ── HERO SECTION
-  • Paper title (display size, bold), author list with affiliations, venue badge, year
-  • Action buttons: [Paper] [Code] [Demo] [Video]
-  • Teaser figure or animated key-result visualization
-  • ICONS: Use Font Awesome 6 CDN — zero downloads needed
-    Add to <head>: <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
-    Examples: <i class="fa-solid fa-brain"></i>, <i class="fa-solid fa-diagram-project"></i>
-    For ML brand logos: <img src="https://cdn.simpleicons.org/pytorch/ffffff" height="20">
-    DO NOT search flaticon.com — use Font Awesome classes directly
-
-Step 5 ── CONTENT SECTIONS
-  • Abstract (formatted prose, KaTeX for equations)
-  • Method: overview SVG diagram + numbered steps
-  • Results: card grid with metrics, comparison tables, gallery images
-
-Step 6 ── INTERACTIVITY
-  • IntersectionObserver scroll animations (fade + slide-up on entry)
-  • BibTeX copy-to-clipboard
-  • Dark/light mode toggle
-  • At least one interactive element: comparison slider, result tab-switcher, or animated diagram
-
-Step 7 ── RESPONSIVE + FINAL
-  • @media queries for 320px, 768px, 1200px
-  • renderMathInElement() call after DOM ready
-  • Fix any overflow; verify file:// protocol works""",
+Step 3 ── DONE
+  • Do NOT read_file to verify. Do NOT web_search for CDN URLs. Polish phase handles review.""",
 
             "flowchart": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
-Step 1 ── UNDERSTAND THE PAPER
-  • Deeply read the paper: identify ALL components, data flows, decision points, algorithms
-  • Extract: input/output types, model architecture layers, training loop, inference pipeline
-  • Use web_search only for paper-specific info: official repo, benchmark results, architecture details
+Step 1 ── PLAN DIAGRAMS
+  • Read the paper deeply: identify ALL components, data flows, decision points
+  • Plan 4 diagram views: (1) Full Pipeline, (2) Training, (3) Inference, (4) Key Concepts
+  • Plan all nodeDetails entries: title, description, section reference, pseudocode
 
-Step 2 ── DIAGRAM DESIGN
-  • Identify 4 diagram views: (1) Full Pipeline, (2) Training Algorithm, (3) Inference Flow, (4) Key Concepts
-  • Write out Mermaid source code for each diagram using paper's actual terminology
-  • Plan all nodeDetails entries: title, description, section reference, pseudocode snippet
-
-Step 3 ── SCAFFOLD
-  • Write index.html: ESM Mermaid v11 import with startOnLoad:false, dark-theme CSS, tab nav
-  • CRITICAL: Use the lazy per-tab rendering pattern from the system prompt above
-  • Each tab gets its OWN panel div (panel-pipeline, panel-training, panel-inference, panel-concepts)
-  • Each panel has its OWN diagram-canvas and detail-panel with unique IDs
-
-Step 4 ── MERMAID DIAGRAMS
-  • Implement all 4 diagrams with real paper content and custom themeVariables
+Step 2 ── WRITE index.html (ONE SHOT)
+  • Write the COMPLETE index.html in a single write_file call
+  • ESM Mermaid v11 import with startOnLoad:false, dark-theme CSS, tab nav
+  • Each tab: OWN panel div + OWN diagram-canvas + OWN detail-panel (unique IDs)
+  • 4 Mermaid diagrams with real paper content, custom themeVariables
   • Color coding: inputs=#3b82f6, transforms=#6366f1, decisions=#f59e0b, outputs=#22c55e, loss=#ef4444
-  • Each .mermaid div is inside its own panel — NEVER share a canvas between tabs
+  • Interactivity: attachHandlers(panel) AFTER mermaid.run(), zoom/pan, walkthrough
+  • Every nodeDetails entry filled — no blank panels
+  • Icons: Font Awesome 6 CDN + cdn.simpleicons.org for ML logos — zero downloads
 
-Step 5 ── INTERACTIVITY
-  • Use attachHandlers(panel) called AFTER mermaid.run() — NOT MutationObserver
-  • Zoom/pan per canvas (CSS transform on the .mermaid div inside each panel)
-  • Step-by-step walkthrough with Next/Prev buttons updates the detail panel for active tab
-
-Step 6 ── CONTENT + ICONS
-  • Fill every node's nodeDetails entry (title, desc, section, code) — no blank panels
-  • ICONS: Use Font Awesome 6 CDN — zero downloads needed
-    Add to <head>: <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css">
-    Examples: <i class="fa-solid fa-brain"></i>, <i class="fa-solid fa-layer-group"></i>, <i class="fa-solid fa-gears"></i>
-    For ML brand logos: <img src="https://cdn.simpleicons.org/pytorch/ffffff" height="20">
-    Use icons in diagram headers, legend, or section titles
-    DO NOT search flaticon.com — use Font Awesome classes directly, zero web searches needed
-
-Step 7 ── POLISH
-  • Verify all 4 diagrams render; check dark theme contrast (4.5:1 minimum)
-  • Test click, zoom, pan, search, walkthrough; verify SVG export works""",
+Step 3 ── DONE
+  • Do NOT read_file to verify. Do NOT web_search for CDN URLs. Polish phase handles review.""",
 
             "slides": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
-Step 1 ── SETUP
-  • install_package: python-pptx (run first)
-  • Plan all slides: list every slide title + content type (title/bullets/chart/diagram)
-  • Use web_search only for paper-specific info: author list, venue, benchmark numbers, diagrams
+━━ SLIDE DECK PHILOSOPHY ━━
+A great presentation tells a STORY, not a data dump. Think like a keynote speaker:
+  • 16-20 slides maximum (never >22). Audience attention drops after 20 minutes.
+  • Structure: Title → Why (motivation) → What (method, 3-4 slides) → So What (2-3 key results) → Conclusion → Q&A
+  • Only 2-3 results tables/charts — pick the MOST IMPORTANT ones that prove the paper's claim.
+  • NEVER include hyperparameter tables, appendix tables, or training config tables.
+  • Tables must be STRUCTURED: proper multi-column add_table() with typed data, NOT text dumps.
+  • Prefer charts over tables when comparing numbers (charts are visual, tables are boring).
+  • Every slide should have a "takeaway" — if it doesn't advance the story, cut it.
 
-Step 2 ── FOUNDATION
-  • Write build.py skeleton: imports, prs = Presentation(), set_dimensions(), helper functions
-  • Helpers: set_dark_bg(slide), add_header_bar(slide, title), format_text(tf, text, size, bold)
-  • Test imports: execute_python with just the import + Presentation() + save to /tmp/test.pptx
+Step 1 ── PLAN (pick 16-20 slides)
+  • Outline every slide: title + content type + 1-line takeaway
+  • Select ONLY 2-3 key results tables from the paper (main comparison, ablation, scaling)
+  • SKIP: hyperparameter configs, training details, appendix tables, per-dataset breakdowns
+  • For each table: manually extract the numbers and hard-code them as Python lists/tuples
 
-Step 3 ── BRANDING + TITLE SLIDES
-  • Pick brand colors: accent #6366f1 (indigo) as default, or match the paper's institution primary color
-  • Title slide: paper title (36-44pt bold, use smaller size for long titles), all authors (22pt), venue+year (18pt)
-  • CRITICAL: if the title exceeds 60 characters, shrink font to 36pt and enable word_wrap=True to prevent overflow
-  • Do NOT download institution logos as SVG — python-pptx cannot render SVGs. Use text-only branding
+Step 2 ── WRITE build.py (ONE SHOT)
+  • Write the COMPLETE build.py in a single write_file call
+  • Include: imports, helpers (set_dark_bg, add_header_bar, add_text_box, add_bullet_list, add_results_table)
+  • Title slide: paper title (36-44pt, shrink if >60 chars), all authors, venue+year
+  • Content slides: bullet points with meaningful text (not raw PDF text!)
+  • Method: use matplotlib to draw architecture diagram → BytesIO → add_picture()
+  • Results: HARD-CODE numbers as Python data. Use add_results_table() for structured comparison.
+    Use add_chart() for visual comparisons. NEVER parse PDF text at runtime.
+  • CRITICAL: do NOT use .style property on charts. Set colors via series.format.fill directly.
+  • CRITICAL: do NOT use pdfplumber, fitz, or any PDF parser to extract table text.
+    All data must be manually extracted and hard-coded as clean Python data structures.
+  • Speaker notes: meaningful narration per slide, not "Discuss key takeaways from table N."
+  • Pre-extracted figures (figures/fig*.png) can be embedded with add_picture()
 
-Step 4 ── CONTENT + METHOD SLIDES
-  • Background slides: text boxes with bullet points (font 20pt, indent levels)
-  • Method slides: use matplotlib to draw architecture diagram → save PNG → add_picture()
-  • Every slide: colored header strip (accent BG rectangle), white title on top
+Step 3 ── EXECUTE
+  • Run: execute_python(open('build.py').read()) — NEVER use subprocess
+  • If errors: read_file build.py, fix the specific line, write_file, re-execute
 
-Step 5 ── RESULTS SLIDES
-  • Use add_chart(XL_CHART_TYPE.BAR_CLUSTERED, ...) with ChartData populated from paper numbers
-  • Chart colors: series fills set to RGBColor(0x63, 0x66, 0xf1) (accent), plot area BG = dark
-
-Step 6 ── EXECUTE + VERIFY
-  • execute_python with full build.py content — verify it saves presentation.pptx without errors
-  • If errors occur, fix python-pptx API calls and retry
-
-Step 7 ── NOTES + FINAL
-  • Add speaker notes to every slide
-  • Write requirements.txt
-  • read_file build.py to verify all slides present before finishing""",
+Step 4 ── REQUIREMENTS + DONE
+  • Write requirements.txt: python-pptx>=1.0.0, matplotlib (if used)
+  • DONE — do NOT self-verify. Polish phase handles review.""",
 
             "latex": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
-Step 1 ── PLAN CONTENT
+Step 1 ── PLAN
   • List every frame title + content type (math/table/tikz/bullets/code)
-  • Extract all key equations and write LaTeX for them (use amsmath environments)
-  • Use web_search only for paper-specific info: exact benchmark numbers, author affiliations
+  • Extract all key equations from the paper
 
-Step 2 ── PREAMBLE
-  • Write complete LaTeX preamble: \\documentclass[aspectratio=169,11pt]{beamer}
-  • Include all packages: amsmath, amssymb, tikz, booktabs, xcolor, hyperref, graphicx, listings
-  • Define colors and theme overrides (accent color #6366f1)
+Step 2 ── WRITE presentation.tex (ONE SHOT)
+  • Write the COMPLETE presentation.tex in a single write_file call
+  • Preamble: \\documentclass[aspectratio=169,11pt]{beamer} + all packages
+  • Theme: \\usetheme{metropolis} with accent color #6366f1
+  • Title + Intro frames, method frames (TikZ diagrams, pseudocode), math frames
+  • Results: \\toprule/\\midrule/\\bottomrule tables, \\textbf{} for best numbers
+  • Conclusion + Q&A frames
 
-Step 3 ── TITLE + INTRO FRAMES
-  • \\maketitle frame; motivation frame with the core problem statement
-  • Background frames: prerequisites with \\item<1-> incremental reveals
-
-Step 4 ── METHOD FRAMES
-  • Main method/algorithm frame: pseudocode using listings or algorithm2e
-  • Architecture frame: TikZ diagram with \\node[draw,rounded corners,fill=accent!20] and \\draw[->]
-  • Math frames: key equations with equation/align environments
-
-Step 5 ── RESULTS FRAMES
-  • Numeric results table: tabular with \\toprule/\\midrule/\\bottomrule
-  • Comparison table: \\textbf{} to highlight best results in each column
-
-Step 6 ── FINAL FRAMES + BUILD
-  • Conclusion frame: 3 key takeaways with \\item<1->
-  • Q&A frame
-  • Write build.sh and README.md with pdflatex compile instructions
-  • execute_python to syntax-check: search for unbalanced $, {, } using Python string parsing""",
+Step 3 ── BUILD SCRIPT + DONE
+  • Write build.sh: pdflatex compile instructions
+  • Write requirements.txt if any Python dependencies used
+  • DONE — do NOT self-verify. Polish phase handles review.""",
 
             "app_streamlit": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
-Step 1 ── RESEARCH
-  • Use web_search: find paper-specific results, author list, GitHub repo
-  • Use search_huggingface: find official model/dataset on HuggingFace Hub
+Step 1 ── FIND MODEL
+  • Use search_huggingface: find official model/dataset
   • Note the model ID, license, and any required tokens
 
-Step 2 ── REQUIREMENTS
-  • Write requirements.txt FIRST: streamlit>=1.30, plus domain dependencies
-  • Include: torch/transformers (if applicable), plotly, numpy, pandas, etc.
+Step 2 ── WRITE app.py (ONE SHOT)
+  • Write the COMPLETE app.py in a single write_file call
+  • st.set_page_config() FIRST, sidebar/tabs layout, paper header
+  • Model loading with @st.cache_resource, data with @st.cache_data
+  • Interactive widgets, st.plotly_chart()/st.pyplot() for results
+  • About section with abstract, BibTeX, links
 
-Step 3 ── PAGE CONFIG + LAYOUT
-  • Write app.py: st.set_page_config() FIRST, then sidebar/tabs layout
-  • Define page structure: sidebar for controls, main area for visualizations
-  • Add paper title, authors, venue in the header area
-
-Step 4 ── CORE LOGIC
-  • Implement model loading with @st.cache_resource (lazy-load, not at import)
-  • Implement data processing with @st.cache_data
-  • Add interactive widgets: sliders, selectboxes, text inputs
-  • Display results with st.plotly_chart() or st.pyplot()
-
-Step 5 ── UX POLISH
-  • Add st.expander() sections for detailed information
-  • Include About section with abstract, BibTeX, links
-  • Add st.spinner() for long operations
-
-Step 6 ── TEST
-  • execute_python: import streamlit — must succeed
-  • Verify requirements.txt lists every import used
-
-Step 7 ── README
-  • Write README.md with HuggingFace Space YAML front-matter (sdk: streamlit)""",
+Step 3 ── REQUIREMENTS + README
+  • Write requirements.txt: streamlit>=1.30 + all dependencies
+  • Write README.md with HF Space YAML (sdk: streamlit)
+  • DONE — do NOT self-verify. Polish phase handles review.""",
 
             "page_readme": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
-Step 1 ── RESEARCH
-  • web_search: find the paper's arXiv URL, GitHub repo, author details
-  • web_search: find benchmark results, comparison numbers, key figures
-  • Note exact arXiv ID for badge URLs
+Step 1 ── WRITE README.md (ONE SHOT)
+  • Write the COMPLETE README.md in a single write_file call
+  • H1 title, badge row (arXiv, Python, license) with real arXiv ID
+  • 2-3 paragraph overview, key results table, teaser figure
+  • ```mermaid architecture diagram, Quick Start, code examples
+  • <details><summary> collapsible sections for full results, ablations
+  • BibTeX in ```bibtex fence, license, acknowledgments
 
-Step 2 ── HEADER + BADGES
-  • Write README.md: H1 title, badge row (arXiv, Python, license)
-  • Use real arXiv ID in badge URL: img.shields.io/badge/arXiv-XXXX.XXXXX-b31b1b.svg
-  • Add 1-line description after badges
-
-Step 3 ── OVERVIEW + KEY RESULTS
-  • Write 2-3 paragraph overview of the paper's contribution
-  • Add a key results table with bold best numbers
-  • Include a teaser figure description or ASCII art
-
-Step 4 ── METHOD + DIAGRAM
-  • Write a ```mermaid code block showing the architecture/pipeline
-  • Add Quick Start section with installation and usage commands
-  • Include code examples in ```python blocks
-
-Step 5 ── DETAILED SECTIONS
-  • Use <details><summary> for collapsible sections (full results, ablations)
-  • Add comparison table with prior work
-  • Include requirements and dependencies
-
-Step 6 ── CITATION + FOOTER
-  • Add BibTeX in ```bibtex code fence
-  • Add license section and acknowledgments
-  • Final review: ensure all badge URLs are correct""",
+Step 2 ── DONE
+  • Do NOT self-verify. Polish phase handles review.""",
 
             "page_blog": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
-Step 1 ── RESEARCH
-  • web_search: find paper arXiv URL, author affiliations, venue
-  • web_search: find key results and figures to reproduce
-  • Note all author names and institutional affiliations
+Step 1 ── WRITE index.html (ONE SHOT)
+  • Write the COMPLETE index.html in a single write_file call
+  • <head>: distill.pub template.v2.js, KaTeX, D3.js CDN links
+  • <d-front-matter> with authors, affiliations, date
+  • <d-article>: Introduction, Background, Method, Results, Discussion
+  • <d-cite> references, <d-aside> margin notes, <d-math> equations
+  • <d-figure> with captions, SVG diagrams for method
+  • At least one D3.js interactive visualization
+  • <d-bibliography> + <d-appendix>
 
-Step 2 ── TEMPLATE SETUP
-  • Write index.html: include distill.pub template.v2.js in <head>
-  • Add KaTeX and D3.js CDN links
-  • Set up <d-front-matter> with authors, date, description
-
-Step 3 ── ARTICLE STRUCTURE
-  • Write <d-article> with sections: Introduction, Background, Method, Results, Discussion
-  • Use <d-cite> for all paper references
-  • Add <d-aside> margin notes for technical terms
-
-Step 4 ── MATH + FIGURES
-  • Add key equations using <d-math> (inline) and <d-math block> (display)
-  • Create <d-figure> elements with descriptive captions
-  • Use SVG diagrams for method illustrations
-
-Step 5 ── INTERACTIVE D3 VISUALIZATION
-  • Create at least one D3.js interactive visualization
-  • Examples: interactive results chart, concept explorer, data distribution plot
-  • Embed in <d-figure> with proper dimensions
-
-Step 6 ── BIBLIOGRAPHY + POLISH
-  • Add <d-bibliography> with all cited papers
-  • Add <d-appendix> with additional details
-  • Test that file opens correctly in browser""",
+Step 2 ── DONE
+  • Do NOT self-verify. Polish phase handles review.""",
 
             "diagram_graphviz": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
-Step 1 ── UNDERSTAND THE PAPER
-  • Deeply read the paper: identify ALL components, data flows, decision points
-  • Extract: input/output types, model layers, training loop, inference pipeline
-  • Use web_search for paper-specific info: official repo, architecture details
-
-Step 2 ── PLAN DIAGRAMS
+Step 1 ── PLAN
+  • Identify ALL components, data flows, decision points from the paper
   • Plan 3 diagrams: (1) Overall architecture, (2) Training pipeline, (3) Key component
-  • List all nodes and edges for each diagram
-  • Decide layout direction (TB or LR) for each
 
-Step 3 ── SETUP + FIRST DIAGRAM
-  • install_package: graphviz
-  • Write build.py skeleton: imports, color constants, helper functions
-  • Implement first diagram (overall architecture) with cluster subgraphs
+Step 2 ── WRITE build.py (ONE SHOT)
+  • Write the COMPLETE build.py in a single write_file call
+  • Imports, color constants, helper functions
+  • All 3 diagrams with cluster subgraphs, consistent colors
+  • Render calls for both SVG and PNG formats
 
-Step 4 ── REMAINING DIAGRAMS
-  • Implement training pipeline diagram with loop structure
-  • Implement key component detail diagram
-  • Use consistent colors across all diagrams
+Step 3 ── EXECUTE
+  • Run: execute_python(open('build.py').read()) — NEVER use subprocess
+  • If errors: fix and re-execute
 
-Step 5 ── RENDER + VERIFY
-  • Add render calls for both SVG and PNG formats
-  • execute_python to test build.py — verify it generates files without errors
-  • Fix any graphviz API issues
-
-Step 6 ── DOCUMENTATION
+Step 4 ── REQUIREMENTS + DONE
   • Write requirements.txt: graphviz>=0.20
-  • Write README.md: install instructions, diagram descriptions, run command
-  • List all generated output files""",
+  • Write README.md: install instructions, run command
+  • DONE — do NOT self-verify. Polish phase handles review.""",
         }
         return steps.get(demo_form, f"Follow logical steps to build a high-quality {demo_form} demo.")
 
@@ -1029,6 +886,14 @@ Step 6 ── DOCUMENTATION
   install_package    Use to install python-pptx, graphviz, matplotlib, etc. before use
 
   ALWAYS: Pre-baked CDN links are in the FORM_SPECS above — use them verbatim, never search for them.
-          Write requirements.txt; read files before overwriting; verify build scripts with execute_python.
+          Write requirements.txt; read files before overwriting.
   NEVER:  Search for reveal.js/Mermaid/KaTeX CDN URLs — they are already provided above.
-          Write placeholder code; skip requirements.txt; leave TODO items unfilled."""
+          Write placeholder code; skip requirements.txt; leave TODO items unfilled.
+          Use subprocess to run scripts — always use execute_python directly.
+
+━━ EFFICIENCY RULES (save iterations & tokens) ━━
+  • Do NOT verify output during build — the Polish phase handles quality review.
+  • Do NOT call list_files or read_file just to check your own work mid-build.
+  • Do NOT web_search for library docs, CDN URLs, or API syntax — everything is pre-baked above.
+  • When running build scripts: use execute_python(open('build.py').read()) — never subprocess.
+  • Minimize iterations: write the complete file in one write_file call, then move on."""

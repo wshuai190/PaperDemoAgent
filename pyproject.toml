@@ -46,9 +46,9 @@ dev = ["pytest>=8.0", "pytest-mock", "responses"]
 paper-demo-agent = "paper_demo_agent.cli:cli"
 
 [project.urls]
-Homepage = "https://github.com/paper-demo-agent/paper-demo-agent"
-Repository = "https://github.com/paper-demo-agent/paper-demo-agent"
-Issues = "https://github.com/paper-demo-agent/paper-demo-agent/issues"
+Homepage = "https://github.com/wshuai190/PaperDemoAgent"
+Repository = "https://github.com/wshuai190/PaperDemoAgent"
+Issues = "https://github.com/wshuai190/PaperDemoAgent/issues"
 
 [build-system]
 requires = ["hatchling"]

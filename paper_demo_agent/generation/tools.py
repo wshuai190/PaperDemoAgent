@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -254,6 +255,27 @@ def tool_search_huggingface(query: str, type: str = "model", limit: int = 5) -> 
         return f"HuggingFace search error: {e}"
 
 
+def _ensure_graphviz_binary() -> str:
+    """Install the Graphviz system binary (dot) if not already present."""
+    if shutil.which("dot"):
+        return ""
+    import platform
+    system = platform.system()
+    if system == "Darwin":
+        cmd = ["brew", "install", "graphviz"]
+    elif system == "Linux":
+        cmd = ["apt-get", "install", "-y", "graphviz"]
+    else:
+        return " (WARNING: Graphviz system binary 'dot' not found — install it manually)"
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode == 0:
+            return " + system binary 'dot' installed"
+        return f" (WARNING: could not install system graphviz: {result.stderr[:200]})"
+    except Exception as e:
+        return f" (WARNING: could not install system graphviz: {e})"
+
+
 def tool_install_package(package: str) -> str:
     try:
         result = subprocess.run(
@@ -263,7 +285,11 @@ def tool_install_package(package: str) -> str:
             timeout=120,
         )
         if result.returncode == 0:
-            return f"Installed: {package}"
+            extra = ""
+            # graphviz Python package needs the system binary (dot) to render
+            if "graphviz" in package.lower():
+                extra = _ensure_graphviz_binary()
+            return f"Installed: {package}{extra}"
         return f"Install failed: {result.stderr[:500]}"
     except subprocess.TimeoutExpired:
         return f"Install timed out: {package}"
