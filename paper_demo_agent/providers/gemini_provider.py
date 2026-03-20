@@ -93,10 +93,14 @@ class GeminiProvider(BaseLLMProvider):
         except ImportError:
             raise ImportError("google-generativeai is required: pip install google-generativeai")
 
-        # Reset any previous genai configuration to avoid
-        # "api_key and credentials are mutually exclusive" errors
-        # when switching between auth methods.
-        genai.configure(api_key=None, credentials=None)
+        # IMPORTANT: genai.configure() has global state. When switching between
+        # api_key and credentials auth, the old state causes
+        # "client_options.api_key and credentials are mutually exclusive" errors.
+        # Fix: create a fresh _client_manager to clear all previous state.
+        try:
+            genai._client_manager = type(genai._client_manager)()
+        except Exception:
+            pass  # If internals change, fall through — configure() may still work
 
         if self.api_key and self._is_gemini_cli_token:
             # Gemini CLI OAuth token — use Bearer auth via google.oauth2.credentials
@@ -105,13 +109,28 @@ class GeminiProvider(BaseLLMProvider):
             try:
                 from google.oauth2.credentials import Credentials
                 credentials = Credentials(token=access_token)
-                genai.configure(credentials=credentials)
+                # Clear env var to prevent conflict with credentials
+                import os
+                env_backup = os.environ.pop("GOOGLE_API_KEY", None)
+                try:
+                    genai.configure(credentials=credentials)
+                finally:
+                    if env_backup is not None:
+                        os.environ["GOOGLE_API_KEY"] = env_backup
             except ImportError:
                 # Fallback: use the raw access token as an API key
                 genai.configure(api_key=access_token)
         elif self.api_key:
             # Standard API key (e.g. from Google AI Studio)
-            genai.configure(api_key=self.api_key)
+            # Temporarily clear GOOGLE_API_KEY env var to prevent genai from
+            # auto-discovering it AND using the passed api_key (double-auth conflict)
+            import os
+            env_backup = os.environ.pop("GOOGLE_API_KEY", None)
+            try:
+                genai.configure(api_key=self.api_key)
+            finally:
+                if env_backup is not None:
+                    os.environ["GOOGLE_API_KEY"] = env_backup
         else:
             # No API key — try Application Default Credentials (gcloud auth)
             try:
