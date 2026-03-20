@@ -93,15 +93,19 @@ class GeminiProvider(BaseLLMProvider):
         except ImportError:
             raise ImportError("google-generativeai is required: pip install google-generativeai")
 
+        # Reset any previous genai configuration to avoid
+        # "api_key and credentials are mutually exclusive" errors
+        # when switching between auth methods.
+        genai.configure(api_key=None, credentials=None)
+
         if self.api_key and self._is_gemini_cli_token:
             # Gemini CLI OAuth token — use Bearer auth via google.oauth2.credentials
-            # IMPORTANT: credentials and api_key are mutually exclusive in genai.configure()
             data = json.loads(self.api_key)
             access_token = data["token"]
             try:
                 from google.oauth2.credentials import Credentials
                 credentials = Credentials(token=access_token)
-                genai.configure(credentials=credentials, api_key=None)
+                genai.configure(credentials=credentials)
             except ImportError:
                 # Fallback: use the raw access token as an API key
                 genai.configure(api_key=access_token)
@@ -115,7 +119,7 @@ class GeminiProvider(BaseLLMProvider):
                 credentials, _ = google.auth.default(
                     scopes=["https://www.googleapis.com/auth/generativelanguage"]
                 )
-                genai.configure(credentials=credentials, api_key=None)
+                genai.configure(credentials=credentials)
             except Exception as exc:
                 raise RuntimeError(
                     "No Gemini API key found and Application Default Credentials unavailable.\n"
