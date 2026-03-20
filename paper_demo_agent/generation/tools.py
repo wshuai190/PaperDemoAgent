@@ -336,20 +336,38 @@ def _safe_path(output_dir: str, relative_path: str) -> Path:
 
 
 _WRITE_FILE_MAX_LINES = 300
+_WRITE_FILE_HARD_MAX = 600  # absolute max — reject above this no matter what
+
+# Single-file forms where the main file is allowed to exceed 300 lines
+_SINGLE_FILE_MAIN = {"demo.html", "presentation.tex", "main.tex"}
 
 
 def tool_write_file(output_dir: str, path: str, content: str) -> str:
     line_count = content.count("\n") + 1
-    if line_count > _WRITE_FILE_MAX_LINES:
+    filename = Path(path).name
+
+    if line_count > _WRITE_FILE_HARD_MAX:
+        # Hard reject — this will ALWAYS truncate
+        return (
+            f"ERROR: File too large ({line_count} lines, max {_WRITE_FILE_HARD_MAX}). "
+            f"Write in multiple calls: first write lines 1-300, then read the file and "
+            f"overwrite with the full content appended."
+        )
+    elif line_count > _WRITE_FILE_MAX_LINES and filename not in _SINGLE_FILE_MAIN:
+        # Soft reject for multi-file forms — force split
         return (
             f"ERROR: File too large ({line_count} lines). "
-            f"Maximum {_WRITE_FILE_MAX_LINES} lines per write. "
+            f"Maximum {_WRITE_FILE_MAX_LINES} lines per write for this file type. "
             f"Split into separate files (CSS, JS, HTML)."
         )
+    # Allow single-file main files up to HARD_MAX (300-600 lines) with a warning
     target = _safe_path(output_dir, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
-    return f"Written {len(content)} bytes to {path}"
+    msg = f"Written {len(content)} bytes to {path}"
+    if line_count > _WRITE_FILE_MAX_LINES:
+        msg += f" (WARNING: {line_count} lines is large — consider chunking next time)"
+    return msg
 
 
 def tool_read_file(output_dir: str, path: str) -> str:

@@ -971,16 +971,30 @@ _LARGE_FILE_FORMS = frozenset([
     "presentation", "website", "page_blog", "latex", "slides",
 ])
 
-_SKELETON_FIRST_MESSAGE = (
+_SKELETON_FIRST_MESSAGE_SPLIT = (
     "CRITICAL — FILE SIZE LIMIT: NEVER write a file longer than 300 lines in a single write_file call.\n"
     "For this output form, you MUST split into separate files and write them in this order:\n"
     "  1. styles.css  — ALL CSS rules (write this first)\n"
     "  2. script.js   — ALL JavaScript (write this second)\n"
-    "  3. Main file (index.html / demo.html) — HTML skeleton only, referencing styles.css + script.js\n"
+    "  3. Main file (index.html) — HTML skeleton only, referencing styles.css + script.js\n"
     "     Use <link rel='stylesheet' href='styles.css'> and <script src='script.js'></script>\n"
     "  4. Overwrite individual sections of the main file if more content is needed\n"
     "If you attempt to write a 500+ line file in one shot it WILL be truncated and fail. Split first."
 )
+
+_SKELETON_FIRST_MESSAGE_SINGLE = (
+    "CRITICAL — FILE SIZE LIMIT: NEVER write a file longer than 300 lines in a single write_file call.\n"
+    "For this presentation, write demo.html as a SINGLE self-contained file.\n"
+    "Do NOT create separate styles.css or script.js — reveal.js requires inline <style> and <script>.\n"
+    "Write demo.html in multiple write_file calls:\n"
+    "  1. First call: write the HTML head + first 5-7 slides (≤300 lines)\n"
+    "  2. Second call: read the file, then overwrite with more slides appended\n"
+    "  3. Continue until all slides are written\n"
+    "START WRITING demo.html NOW — do not create any other files first."
+)
+
+# Single-file forms where CSS/JS must be inline (no external files)
+_SINGLE_FILE_FORMS = frozenset(["presentation", "latex"])
 
 # Tools that are safe to run in parallel (no side effects on shared state)
 _PARALLEL_SAFE_TOOLS = frozenset([
@@ -1157,14 +1171,25 @@ def _run_loop(
         else:
             messages.append(_anthropic_assistant_message(response))
 
-        # Skeleton-first injection (optimization #3): after first iteration in build phase
-        # where no main file has been written yet, inject skeleton-first hint for large forms
-        if (is_build and not skeleton_injected and iteration >= 1
-                and build_form in _LARGE_FILE_FORMS):
-            has_files = any(True for f in Path(output_dir).rglob("*") if f.is_file())
-            if not has_files:
-                on_emit("  ↳ Injecting skeleton-first writing strategy hint\n")
-                messages.append({"role": "user", "content": _SKELETON_FIRST_MESSAGE})
+        # Check if main file exists — nudge model to write it if supporting files exist but main doesn't
+        if is_build and iteration >= 1:
+            from paper_demo_agent.skills.base import FORM_SPECS as _FS
+            _spec = _FS.get(build_form, {})
+            _main_file = _spec.get("main_file", "index.html")
+            _main_path = Path(output_dir) / _main_file
+            _all_files = [f.name for f in Path(output_dir).rglob("*") if f.is_file() and f.name != "paper.pdf"]
+            _has_support = any(f.endswith((".css", ".js")) for f in _all_files)
+            _has_main = _main_path.exists()
+
+            if _has_support and not _has_main and not skeleton_injected:
+                nudge_main = (
+                    f"URGENT: You have written supporting files ({', '.join(f for f in _all_files if f != 'paper.pdf')}) "
+                    f"but NOT the main file '{_main_file}'. Write '{_main_file}' NOW using write_file. "
+                    f"Reference your existing CSS/JS files with <link> and <script> tags. "
+                    f"This is the most important file — without it, the demo is broken."
+                )
+                on_emit(f"  ↳ Nudging: supporting files exist but no {_main_file}\n")
+                messages.append({"role": "user", "content": nudge_main})
                 skeleton_injected = True
 
         # Track whether this iteration is search-only (build phase only)
@@ -1340,15 +1365,20 @@ def generate(
 
         # Inject skeleton-first hint BEFORE iteration 0 for large-file forms (Priority 1 fix)
         if form in _LARGE_FILE_FORMS:
-            initial += (
-                "\n\n" + _SKELETON_FIRST_MESSAGE +
-                "\n\nFILE WRITING ORDER: You MUST write files in this order:\n"
-                "1. styles.css (all CSS)\n"
-                "2. script.js or visualizations.js (all JavaScript)\n"
-                "3. Main file (index.html / demo.html) — reference the CSS and JS files with "
-                "<link> and <script> tags\n"
-                "This prevents truncation. Do NOT combine everything into one file."
-            )
+            if form in _SINGLE_FILE_FORMS:
+                # Presentation/LaTeX: single self-contained file, no external CSS/JS
+                initial += "\n\n" + _SKELETON_FIRST_MESSAGE_SINGLE
+            else:
+                # Website/blog/app: split into separate CSS, JS, HTML files
+                initial += (
+                    "\n\n" + _SKELETON_FIRST_MESSAGE_SPLIT +
+                    "\n\nFILE WRITING ORDER: You MUST write files in this order:\n"
+                    "1. styles.css (all CSS)\n"
+                    "2. script.js or visualizations.js (all JavaScript)\n"
+                    "3. Main file (index.html) — reference the CSS and JS files with "
+                    "<link> and <script> tags\n"
+                    "This prevents truncation. Do NOT combine everything into one file."
+                )
 
         messages: list[dict] = [{"role": "user", "content": initial}]
 
