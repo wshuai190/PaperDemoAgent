@@ -19,7 +19,7 @@
 
 ---
 
-## What's New in v0.3.0
+## What's New in v0.3.1
 
 - **Claude Code OAuth** — Use your Claude Pro/Max subscription directly. Auto-detected from the macOS Keychain or `~/.claude/` after `claude auth login`. No API key needed.
 - **`claude setup-token` support** — Generate a long-lived token with `claude setup-token` and save it with `paper-demo-agent key set ANTHROPIC_API_KEY <token>`.
