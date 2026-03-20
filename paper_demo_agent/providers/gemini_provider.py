@@ -95,22 +95,27 @@ class GeminiProvider(BaseLLMProvider):
 
         if self.api_key and self._is_gemini_cli_token:
             # Gemini CLI OAuth token — use Bearer auth via google.oauth2.credentials
+            # IMPORTANT: credentials and api_key are mutually exclusive in genai.configure()
             data = json.loads(self.api_key)
             access_token = data["token"]
             try:
                 from google.oauth2.credentials import Credentials
                 credentials = Credentials(token=access_token)
-                genai.configure(credentials=credentials)
+                genai.configure(credentials=credentials, api_key=None)
             except ImportError:
+                # Fallback: use the raw access token as an API key
                 genai.configure(api_key=access_token)
         elif self.api_key:
-            # Fall back to Application Default Credentials (gcloud auth application-default login)
+            # Standard API key (e.g. from Google AI Studio)
+            genai.configure(api_key=self.api_key)
+        else:
+            # No API key — try Application Default Credentials (gcloud auth)
             try:
                 import google.auth
                 credentials, _ = google.auth.default(
                     scopes=["https://www.googleapis.com/auth/generativelanguage"]
                 )
-                genai.configure(credentials=credentials)
+                genai.configure(credentials=credentials, api_key=None)
             except Exception as exc:
                 raise RuntimeError(
                     "No Gemini API key found and Application Default Credentials unavailable.\n"
