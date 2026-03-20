@@ -586,6 +586,53 @@ Target: Publication-quality ML architecture diagrams."""
     # Shared helpers
     # ─────────────────────────────────────────────────────────────────────
 
+    @classmethod
+    def _cdn_urls(cls) -> dict[str, str]:
+        """Return a dict of verified CDN URLs, keyed by library name.
+
+        All URLs have been tested and are known-good at the pinned version.
+        Inject these into skill prompts via _tool_usage_instructions() to avoid
+        the agent wasting iterations searching for or guessing CDN links.
+        """
+        return {
+            # ── Fonts ────────────────────────────────────────────────────────
+            "inter_font": (
+                "https://fonts.googleapis.com/css2?family=Inter:"
+                "ital,opsz,wght@0,14..32,300..700;1,14..32,300..700&display=swap"
+            ),
+            "jetbrains_mono": (
+                "https://fonts.googleapis.com/css2?family=JetBrains+Mono:"
+                "wght@400;500&display=swap"
+            ),
+            # ── Math ─────────────────────────────────────────────────────────
+            "katex_css": "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css",
+            "katex_js": "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js",
+            "katex_auto_render": (
+                "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+            ),
+            # ── Presentation ─────────────────────────────────────────────────
+            "revealjs_css": "https://unpkg.com/reveal.js@5.2.1/dist/reveal.css",
+            "revealjs_theme_black": "https://unpkg.com/reveal.js@5.2.1/dist/theme/black.css",
+            "revealjs_highlight_css": (
+                "https://unpkg.com/reveal.js@5.2.1/plugin/highlight/monokai.css"
+            ),
+            "revealjs_js": "https://unpkg.com/reveal.js@5.2.1/dist/reveal.js",
+            "revealjs_highlight_js": (
+                "https://unpkg.com/reveal.js@5.2.1/plugin/highlight/highlight.js"
+            ),
+            "revealjs_math_js": "https://unpkg.com/reveal.js@5.2.1/plugin/math/math.js",
+            "revealjs_notes_js": "https://unpkg.com/reveal.js@5.2.1/plugin/notes/notes.js",
+            # ── Diagrams ─────────────────────────────────────────────────────
+            "mermaid_esm": (
+                "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs"
+                "  <!-- use <script type=module> -->"
+            ),
+            # ── Data / Viz ────────────────────────────────────────────────────
+            "d3_v7": "https://d3js.org/d3.v7.min.js",
+            # ── Publishing ────────────────────────────────────────────────────
+            "distill_template": "https://distill.pub/template.v2.js",
+        }
+
     def _graphics_reference(self) -> str:
         """Return the GRAPHICS_REFERENCE string for injection into prompts."""
         from paper_demo_agent.graphics import GRAPHICS_REFERENCE
@@ -911,16 +958,21 @@ Step 4 ── REQUIREMENTS + DONE
         return steps.get(demo_form, f"Follow logical steps to build a high-quality {demo_form} demo.")
 
     def _tool_usage_instructions(self) -> str:
-        return """━━ TOOL USAGE RULES ━━
+        cdn = self._cdn_urls()
+        cdn_block = "\n".join(f"    {k:<28} {v}" for k, v in cdn.items())
+        return f"""━━ VERIFIED CDN URLS (use verbatim — do NOT search for alternatives) ━━
+{cdn_block}
+
+━━ TOOL USAGE RULES ━━
 
   web_search         Use for PAPER-SPECIFIC info: official results, author list, GitHub repo
                      NOT for library basics already documented in this system prompt
   search_huggingface Use to find official models/datasets for the paper
   extract_pdf_page   Render a PDF page (or cropped region) as PNG to embed in slides/demos
                      Required args: page (1-indexed integer)
-                     Optional: dpi (default 150), crop ({x0,y0,x1,y1} as 0.0–1.0 fractions), filename
+                     Optional: dpi (default 150), crop ({{x0,y0,x1,y1}} as 0.0–1.0 fractions), filename
                      Examples:  extract_pdf_page(page=5)                  → full page 5
-                                extract_pdf_page(page=7, crop={x0:0,y0:0.5,x1:1,y1:1})  → bottom half of page 7
+                                extract_pdf_page(page=7, crop={{x0:0,y0:0.5,x1:1,y1:1}})  → bottom half of page 7
                      Use this for: architecture diagrams, result tables, example figures from the paper
   download_file      Use to fetch images from URLs into the output directory
                      For ML brand logos only: download_file url=https://cdn.simpleicons.org/pytorch/ffffff filename=assets/pytorch.svg
@@ -978,4 +1030,15 @@ Step 4 ── REQUIREMENTS + DONE
   • Do NOT call list_files or read_file just to check your own work mid-build.
   • Do NOT web_search for library docs, CDN URLs, or API syntax — everything is pre-baked above.
   • When running build scripts: use execute_python(open('build.py').read()) — never subprocess.
-  • Minimize iterations: write the complete file in one write_file call, then move on."""
+  • Minimize iterations: write the complete file in one write_file call, then move on.
+
+━━ CRITICAL FILE SIZE RULE ━━
+  NEVER write more than 250 lines in a single write_file call.
+  For HTML demos, ALWAYS split into separate files:
+    1. styles.css  — all CSS rules
+    2. script.js   — all JavaScript
+    3. index.html  — the skeleton that references them via <link> / <script src>
+  Write CSS and JS FIRST, then the HTML skeleton referencing them.
+  For Python: extract large data constants into data.py, large helpers into helpers.py.
+  For LaTeX: split appendix content into appendix.tex and \\input{{appendix}} from the main file.
+  NEVER truncate content to force it under the limit — split intelligently instead."""
