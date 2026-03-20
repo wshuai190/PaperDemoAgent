@@ -985,13 +985,17 @@ _SKELETON_FIRST_MESSAGE_SPLIT = (
 )
 
 _SKELETON_FIRST_MESSAGE_SINGLE = (
-    "CRITICAL — FILE SIZE LIMIT: NEVER write a file longer than 300 lines in a single write_file call.\n"
-    "For this presentation, write demo.html as a SINGLE self-contained file.\n"
+    "CRITICAL — For this presentation, write demo.html as a SINGLE self-contained file.\n"
     "Do NOT create separate styles.css or script.js — reveal.js requires inline <style> and <script>.\n"
-    "Write demo.html in multiple write_file calls:\n"
-    "  1. First call: write the HTML head + first 5-7 slides (≤300 lines)\n"
-    "  2. Second call: read the file, then overwrite with more slides appended\n"
-    "  3. Continue until all slides are written\n"
+    "Do NOT create slides_part2.html or slide_parts/ — ALL slides go in ONE demo.html file.\n\n"
+    "STRATEGY for building demo.html incrementally:\n"
+    "  1. write_file('demo.html', ...) — HTML head + <style> + first 7-8 slides (~400-600 lines)\n"
+    "  2. append_file('demo.html', ...) — remaining slides + closing tags\n"
+    "     (append_file adds content to the END of the file — no need to re-read it)\n"
+    "  3. If needed, append_file again for more slides\n\n"
+    "IMPORTANT: The FIRST write_file should include everything up to and including the first ~8 <section> slides.\n"
+    "Do NOT close </div></div></body></html> in the first write — leave it open for appending.\n"
+    "The LAST append_file MUST close all tags: </div></div></body></html>\n"
     "START WRITING demo.html NOW — do not create any other files first."
 )
 
@@ -1001,7 +1005,7 @@ _SINGLE_FILE_FORMS = frozenset(["presentation", "latex"])
 # Tools that are safe to run in parallel (no side effects on shared state)
 _PARALLEL_SAFE_TOOLS = frozenset([
     "web_search", "search_huggingface", "read_file", "list_files",
-    "write_file", "download_file", "validate_output",
+    "write_file", "append_file", "download_file", "validate_output",
 ])
 # Tools with side effects that must run sequentially
 _SEQUENTIAL_TOOLS = frozenset(["execute_python", "install_package"])

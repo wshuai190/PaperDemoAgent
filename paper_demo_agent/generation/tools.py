@@ -28,8 +28,8 @@ TOOLS: List[Dict] = [
         "name": "write_file",
         "description": (
             "Write content to a file in the output directory. Paths are relative to the output directory. "
-            "HARD LIMIT: maximum 300 lines per call — the tool will REJECT writes over 300 lines with an error. "
-            "Always split large files (CSS → style.css, JS → script.js, HTML skeleton → index.html) BEFORE writing."
+            "Limit: 400 lines for split files (CSS/JS), 800 lines for main files (demo.html, index.html). "
+            "For presentations: write demo.html with first slides, then use append_file to add more slides."
         ),
         "parameters": {
             "type": "object",
@@ -41,6 +41,28 @@ TOOLS: List[Dict] = [
                 "content": {
                     "type": "string",
                     "description": "The file content to write",
+                },
+            },
+            "required": ["path", "content"],
+        },
+    },
+    {
+        "name": "append_file",
+        "description": (
+            "Append content to an existing file. Use this to incrementally build up large files like "
+            "demo.html — write the first chunk with write_file, then add more sections with append_file. "
+            "The file must already exist. Max combined size: 1200 lines."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative file path to append to",
+                },
+                "content": {
+                    "type": "string",
+                    "description": "Content to append to the end of the file",
                 },
             },
             "required": ["path", "content"],
@@ -338,37 +360,34 @@ def _safe_path(output_dir: str, relative_path: str) -> Path:
 
 
 _WRITE_FILE_MAX_LINES = 300
-_WRITE_FILE_HARD_MAX = 600  # absolute max — reject above this no matter what
+_WRITE_FILE_HARD_MAX = 800  # absolute max for single-file forms
+_WRITE_FILE_SPLIT_MAX = 400  # max for files that should be split (CSS, JS, etc.)
 
-# Single-file forms where the main file is allowed to exceed 300 lines
-_SINGLE_FILE_MAIN = {"demo.html", "presentation.tex", "main.tex"}
+# Single-file forms where the main file is allowed to be larger
+_SINGLE_FILE_MAIN = {"demo.html", "presentation.tex", "main.tex", "index.html"}
 
 
 def tool_write_file(output_dir: str, path: str, content: str) -> str:
     line_count = content.count("\n") + 1
     filename = Path(path).name
 
-    if line_count > _WRITE_FILE_HARD_MAX:
-        # Hard reject — this will ALWAYS truncate
+    is_main = filename in _SINGLE_FILE_MAIN
+    max_allowed = _WRITE_FILE_HARD_MAX if is_main else _WRITE_FILE_SPLIT_MAX
+
+    if line_count > max_allowed:
         return (
-            f"ERROR: File too large ({line_count} lines, max {_WRITE_FILE_HARD_MAX}). "
-            f"Write in multiple calls: first write lines 1-300, then read the file and "
-            f"overwrite with the full content appended."
+            f"ERROR: File too large ({line_count} lines, max {max_allowed}). "
+            + (f"Write in multiple calls: first write the skeleton, then use read_file + write_file to append more content."
+               if is_main else
+               f"Split into separate files (CSS, JS, HTML).")
         )
-    elif line_count > _WRITE_FILE_MAX_LINES and filename not in _SINGLE_FILE_MAIN:
-        # Soft reject for multi-file forms — force split
-        return (
-            f"ERROR: File too large ({line_count} lines). "
-            f"Maximum {_WRITE_FILE_MAX_LINES} lines per write for this file type. "
-            f"Split into separate files (CSS, JS, HTML)."
-        )
-    # Allow single-file main files up to HARD_MAX (300-600 lines) with a warning
+    # Write the file
     target = _safe_path(output_dir, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
     msg = f"Written {len(content)} bytes to {path}"
     if line_count > _WRITE_FILE_MAX_LINES:
-        msg += f" (WARNING: {line_count} lines is large — consider chunking next time)"
+        msg += f" (NOTE: {line_count} lines — large but accepted for main file)"
     return msg
 
 
@@ -381,6 +400,23 @@ def tool_read_file(output_dir: str, path: str) -> str:
     except UnicodeDecodeError:
         size = target.stat().st_size
         return f"Error: {path} is a binary file ({size} bytes) and cannot be read as text."
+
+
+def tool_append_file(output_dir: str, path: str, content: str) -> str:
+    """Append content to an existing file. Useful for building up large files incrementally."""
+    target = _safe_path(output_dir, path)
+    if not target.exists():
+        return f"Error: file not found: {path}. Use write_file to create it first."
+    existing = target.read_text(encoding="utf-8")
+    combined = existing + content
+    combined_lines = combined.count("\n") + 1
+    if combined_lines > 1200:
+        return (
+            f"ERROR: Combined file would be {combined_lines} lines (max 1200). "
+            f"The file is getting too large."
+        )
+    target.write_text(combined, encoding="utf-8")
+    return f"Appended {len(content)} bytes to {path} (total: {len(combined)} bytes, {combined_lines} lines)"
 
 
 def tool_search_huggingface(query: str, type: str = "model", limit: int = 5) -> str:
@@ -941,6 +977,8 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], output_dir: str) ->
             return tool_list_files(output_dir)
         elif tool_name == "write_file":
             return tool_write_file(output_dir, arguments["path"], arguments["content"])
+        elif tool_name == "append_file":
+            return tool_append_file(output_dir, arguments["path"], arguments["content"])
         elif tool_name == "read_file":
             return tool_read_file(output_dir, arguments["path"])
         elif tool_name == "search_huggingface":
