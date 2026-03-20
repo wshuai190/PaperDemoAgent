@@ -45,10 +45,55 @@
 - 119/119 passing (79 original + 40 graphics)
 - All changes committed
 
-### TODO for next sessions
-- [ ] Review demo test output in /tmp/pda-test-demo/
-- [ ] Test with different paper types (ViT, GPT-3, GPT-4)
-- [ ] Check if graphics templates are actually being used in generated output
-- [ ] Add more architecture templates (CNN, RNN, GAN)
+### TODO from Session 1
+- [x] Review demo test output in /tmp/pda-test-demo/ — 50KB reveal.js deck for "Attention Is All You Need", CDN correct, Chart.js loaded, inline SVGs present but handwritten (before toolkit injection)
+- [x] Check if graphics templates are actually being used — they weren't before; fixed by injecting toolkit into _tool_usage_instructions()
+- [x] Add more architecture templates (CNN, RNN, GAN) — done in Session 2
+- [ ] Test with ViT paper (2010.11929) — blocked by expired Claude Code OAuth token
 - [ ] Validate HTML output quality across forms
 - [ ] Consider adding screenshot feedback tool
+
+---
+
+## Session 2 — 2026-03-21 04:00 (Brisbane)
+
+### Graphics Module Expansion
+
+**Architecture Templates (architecture_templates.py):**
+- `cnn_architecture(layers_config)` — CNN with featuremap-style stacked boxes for conv/pool layers
+- `rnn_cell(cell_type='lstm')` — LSTM/GRU cell with gate annotations (forget/input/cell/output for LSTM, update/reset/new for GRU)
+- `residual_block(num_layers=2)` — Skip connection block (BasicBlock=2 layers, Bottleneck=3 layers) with dashed skip path
+- `multi_head_attention_detail(num_heads, d_k, d_v)` — Detailed MHA with Q/K/V inputs, per-head boxes, Concat+Linear
+- `gan_architecture(gen_layers, disc_layers)` — Generator vs Discriminator side-by-side with fake image routing arrow
+
+**Chart Templates (chart_templates.py):**
+- `line_chart_js(data_series, labels, title, y_label)` — Chart.js multi-line for training curves / metrics over epochs
+- `heatmap_d3(matrix, row_labels, col_labels, title, color_scheme)` — D3.js heatmap with auto-normalisation (attention, confusion, similarity)
+- `metric_dashboard_html(metrics_dict)` — Responsive grid of metric cards with delta badges (positive/negative colour-coded)
+
+**Mermaid Patterns (mermaid_patterns.py):**
+- `mermaid_training_loop(steps=None)` — Standard data→forward→loss→backward→update pipeline with automatic loop-back when last step ends with "?"
+- `mermaid_comparison(method_a_steps, method_b_steps, labels)` — Parallel subgraphs comparing baseline vs proposed (muted vs accent colour)
+
+### Skill Prompt Improvements
+- Added comprehensive **GRAPHICS TOOLKIT** section to `BaseSkill._tool_usage_instructions()`
+- All 13+ skills now inherit the toolkit reference automatically — no per-skill edits needed
+- Section lists all functions by category (architecture/chart/mermaid/tikz) with usage examples
+- Strong directive: "Do NOT write raw SVG path data from scratch — use the toolkit"
+
+### Tests
+- 146/146 passing (was 128) — added 18 new test cases across architecture, chart, and mermaid modules
+- All new functions tested for: SVG validity, key label presence, color checks, empty inputs
+
+### Issues Found
+- `page_blog` is not a valid form type (correct is `--form page --subtype blog`) — note for future test scripts
+- Claude Code OAuth token is expired — ViT demo could not be fully tested end-to-end
+  - **Action needed**: `claude login` to refresh token
+
+### TODO for next sessions
+- [ ] Refresh Claude Code OAuth token, test ViT paper (2010.11929) end-to-end
+- [ ] Verify the new graphics toolkit is actually used in generated output (check generated HTML for render_svg calls vs raw SVG)
+- [ ] Add screenshot feedback tool (playwright screenshot → validate_output vision check)
+- [ ] Consider adding `mermaid_gantt(tasks)` for timeline/schedule diagrams
+- [ ] Consider `treemap_d3(hierarchy_data)` for model/dataset breakdown charts
+- [ ] Profile token usage: are the longer system prompts causing cost increases?
