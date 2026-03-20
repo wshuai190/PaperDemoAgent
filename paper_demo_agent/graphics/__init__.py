@@ -54,6 +54,9 @@ from paper_demo_agent.graphics.mermaid_patterns import (
     mermaid_sequence,
 )
 
+# ── Dark theme ────────────────────────────────────────────────────────
+from paper_demo_agent.graphics.themes import DARK_THEME_CSS
+
 __all__ = [
     # svg primitives
     "rounded_box", "arrow", "flow_arrow", "layer_stack", "parallel_blocks",
@@ -74,6 +77,8 @@ __all__ = [
     "mermaid_sequence",
     # reference constant
     "GRAPHICS_REFERENCE",
+    # dark theme
+    "DARK_THEME_CSS",
 ]
 
 
@@ -87,6 +92,14 @@ GRAPHICS_REFERENCE = r"""
 
 You have access to pre-built graphics functions via `from paper_demo_agent.graphics import *`.
 Use these in `execute_python` to generate SVG files, or reference the patterns for inline use.
+
+DARK THEME CSS:
+  `DARK_THEME_CSS` — a complete production-ready CSS string for dark-themed HTML demos.
+  Usage: write_file('styles.css', DARK_THEME_CSS) — then <link rel="stylesheet" href="styles.css">
+  Includes: CSS variables, reset, typography, cards, buttons, forms, nav, badges, tables,
+            progress bars, code blocks with syntax tokens, hero, tabs, tooltips, scrollbar,
+            utilities, responsive breakpoints (xs/sm/md/lg/xl).
+  All bg/accent colours match the SVG primitives palette.
 
 COLOR SCHEME (dark theme):
   Background : #09090b

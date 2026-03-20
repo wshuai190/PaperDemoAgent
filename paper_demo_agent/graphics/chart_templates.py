@@ -5,6 +5,8 @@ HTML files so charts run client-side via Chart.js or D3.js.
 
 All templates use the shared dark colour palette.
 """
+from __future__ import annotations
+from typing import Optional
 
 CHART_JS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"
 """Chart.js v4 UMD CDN link (dark-theme compatible)."""
@@ -18,7 +20,7 @@ _COLORS = ["#3b82f6", "#6366f1", "#f59e0b", "#22c55e", "#ef4444",
 
 
 def bar_chart_js(data: list[float], labels: list[str], title: str,
-                 colors: list[str] | None = None,
+                 colors: Optional[list[str]] = None,
                  highlight_idx: int = 0) -> str:
     """Chart.js bar chart with one highlighted bar (the proposed method).
 

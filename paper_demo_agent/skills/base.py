@@ -405,6 +405,10 @@ STEP 3 — Polish the visual design:
 STEP 4 — Final check:
   • {main_file} opens without errors in a browser
   • README.md (if applicable) has correct run commands
+  • Verify all CDN URLs are correct pinned versions (no 'latest', no wrong versions)
+  • Check all figures from figures/ directory are referenced in the output
+  • Verify dark theme consistency — no white or near-white backgrounds anywhere
+  • Check all interactive elements work: buttons respond, sliders update, links point somewhere valid
 
 Target quality: {quality_bar}
 Rewrite any file that needs significant changes. Make it genuinely impressive."""
@@ -450,6 +454,12 @@ Step 3 — Content quality:
   • Real numeric results from the paper in the results frames (not "~X%" estimates)
   • All key paper contributions covered: at minimum motivation, method, results, conclusion
 
+Step 4 — Universal checks:
+  • Verify all CDN URLs are correct pinned versions
+  • Check all figures from figures/ directory are referenced
+  • Verify dark theme consistency (no white backgrounds)
+  • Check all interactive elements work (buttons, sliders, links)
+
 Fix everything found. Target: ICML oral talk quality Beamer slides."""
 
         elif demo_form == "slides":
@@ -476,6 +486,12 @@ Step 3 — Content:
   • Real numeric benchmark results (not placeholders)
   • Results slides must include actual paper numbers
 
+Step 3 — Universal checks:
+  • Verify all CDN URLs are correct pinned versions
+  • Check all figures from figures/ directory are referenced
+  • Verify dark theme consistency (no white backgrounds)
+  • Check all interactive elements work (buttons, sliders, links)
+
 Fix all issues. Target: NeurIPS oral presentation deck."""
 
         elif demo_form == "presentation":
@@ -497,6 +513,12 @@ Step 2 — Content:
 
 Step 3 — Fix any broken slide structure
 
+Step 4 — Universal checks:
+  • Verify all CDN URLs are correct pinned versions (reveal.js@5.2.1, etc.)
+  • Check all figures from figures/ directory are referenced
+  • Verify dark theme consistency (no white backgrounds)
+  • Check all interactive elements work (buttons, fragments, links)
+
 Target: NeurIPS/ICML oral presentation slides."""
 
         elif demo_form == "app_streamlit":
@@ -515,6 +537,12 @@ Step 2 — Content:
   • BibTeX or citation section included
 
 Step 3 — Fix any missing requirements in requirements.txt
+
+Step 4 — Universal checks:
+  • Verify all CDN URLs are correct pinned versions
+  • Check all figures from figures/ directory are referenced
+  • Verify dark theme consistency (no white backgrounds in custom CSS)
+  • Check all interactive widgets work (sliders update, buttons respond)
 
 Target: Streamlit Gallery featured apps."""
 
@@ -536,6 +564,12 @@ Step 2 — Content:
 
 Step 3 — Fix any placeholder text or broken badge URLs
 
+Step 4 — Universal checks:
+  • Verify all CDN URLs are correct pinned versions (shields.io badges, etc.)
+  • Check all figures referenced in README actually exist in figures/
+  • Verify dark-mode friendly content (avoid raw white image backgrounds)
+  • Check all code fences have language specifiers and are syntactically valid
+
 Target: Papers With Code top repositories."""
 
         elif demo_form == "page_blog":
@@ -556,6 +590,12 @@ Step 2 — Content:
 
 Step 3 — Fix any broken Distill components
 
+Step 4 — Universal checks:
+  • Verify all CDN URLs are correct pinned versions (distill template.v2.js, d3, etc.)
+  • Check all figures from figures/ directory are referenced in the article
+  • Verify dark theme consistency (article body: no white/light hardcoded backgrounds)
+  • Check all interactive D3 visualizations respond to user interaction
+
 Target: distill.pub published article quality."""
 
         elif demo_form == "diagram_graphviz":
@@ -575,6 +615,12 @@ Step 3 — Content:
   • Diagrams use real paper terminology and architecture
   • requirements.txt includes graphviz>=0.20
   • README.md has install and run instructions
+
+Step 4 — Universal checks:
+  • Verify all CDN URLs / pip package versions are correct
+  • Check all figures referenced in README exist in the output directory
+  • Verify dark theme consistency in SVG output (bg: #09090b for wrappers)
+  • Check all generated diagrams render without errors (run execute_python again)
 
 Target: Publication-quality ML architecture diagrams."""
 
@@ -1033,12 +1079,14 @@ Step 4 ── REQUIREMENTS + DONE
   • Minimize iterations: write the complete file in one write_file call, then move on.
 
 ━━ CRITICAL FILE SIZE RULE ━━
-  NEVER write more than 250 lines in a single write_file call.
-  For HTML demos, ALWAYS split into separate files:
-    1. styles.css  — all CSS rules
-    2. script.js   — all JavaScript
-    3. index.html  — the skeleton that references them via <link> / <script src>
-  Write CSS and JS FIRST, then the HTML skeleton referencing them.
+  NEVER write a file longer than 300 lines in a single write_file call.
+  If a file would exceed 300 lines, ALWAYS split it BEFORE writing the first call:
+    Step 1 → write styles.css   (all CSS — typically 100-200 lines)
+    Step 2 → write script.js    (all JavaScript — typically 100-300 lines)
+    Step 3 → write index.html   (skeleton only — references styles.css + script.js)
+    Step 4 → overwrite sections of index.html if content is still incomplete
+  Write CSS and JS FIRST so the HTML skeleton can reference them with <link> / <script src>.
   For Python: extract large data constants into data.py, large helpers into helpers.py.
   For LaTeX: split appendix content into appendix.tex and \\input{{appendix}} from the main file.
-  NEVER truncate content to force it under the limit — split intelligently instead."""
+  NEVER truncate content to force it under the limit — split intelligently instead.
+  NEVER attempt to write a 500+ line file in one shot — it WILL be truncated and the tool call will fail."""

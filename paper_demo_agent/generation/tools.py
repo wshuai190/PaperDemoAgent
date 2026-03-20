@@ -277,6 +277,9 @@ def tool_read_file(output_dir: str, path: str) -> str:
 def tool_search_huggingface(query: str, type: str = "model", limit: int = 5) -> str:
     # LLMs sometimes send floats for integer params — islice() requires int
     limit = max(1, min(int(limit), 20))
+    items = []
+    hf_error: Optional[str] = None
+
     try:
         from huggingface_hub import HfApi
         api = HfApi()
@@ -288,17 +291,31 @@ def tool_search_huggingface(query: str, type: str = "model", limit: int = 5) -> 
                 for r in results
             ]
         else:
-            results = list(api.list_models(search=query, limit=limit, sort="downloads"))
+            # Try sort="downloads" first; fall back to no sort if unsupported
+            try:
+                results = list(api.list_models(search=query, limit=limit, sort="downloads"))
+            except Exception:
+                results = list(api.list_models(search=query, limit=limit))
             items = [
                 {"id": r.id, "downloads": getattr(r, "downloads", 0), "likes": getattr(r, "likes", 0)}
                 for r in results
             ]
-
-        if not items:
-            return f"No {type}s found for query: {query!r}"
-        return json.dumps(items, indent=2)
     except Exception as e:
-        return f"HuggingFace search error: {e}"
+        hf_error = str(e)
+
+    if items:
+        return json.dumps(items, indent=2)
+
+    # Fallback: web_search with site:huggingface.co so the agent still finds
+    # relevant models/datasets even when the Hub API returns nothing.
+    prefix = (
+        f"HuggingFace API error: {hf_error}"
+        if hf_error
+        else f"HuggingFace API returned no results for {query!r}"
+    )
+    fallback_query = f"site:huggingface.co {query}"
+    fallback_result = tool_web_search(fallback_query)
+    return f"{prefix}. Web search fallback (site:huggingface.co):\n\n{fallback_result}"
 
 
 def _ensure_graphviz_binary() -> str:

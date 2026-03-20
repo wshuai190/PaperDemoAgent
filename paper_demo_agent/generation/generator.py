@@ -220,6 +220,45 @@ def _build_run_command(output_dir: str, main_file: str, demo_form: str) -> str:
 # Form validation
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _auto_validate_files(output_dir: str, form: str) -> str:
+    """Run tool_validate_output on the main generated files and consolidate issues.
+
+    Returns a non-empty string describing all issues found, or empty string if
+    everything is clean.  Only checks file types that the validator supports
+    (.html, .py, .js).
+    """
+    from paper_demo_agent.generation.tools import tool_validate_output
+
+    base = Path(output_dir)
+
+    # Collect files to check — prefer main entry points, then all HTML/PY/JS
+    spec = FORM_SPECS.get(form, {})
+    main_file = spec.get("main_file", "")
+    priority: List[str] = [main_file] if main_file else []
+
+    html_files = sorted(str(f.relative_to(base)) for f in base.glob("*.html"))
+    py_files   = sorted(str(f.relative_to(base)) for f in base.glob("*.py"))
+    js_files   = sorted(str(f.relative_to(base)) for f in base.glob("*.js"))
+
+    # Build deduped list: priority first, then up to 3 of each type
+    seen: set = set()
+    to_check: List[str] = []
+    for p in priority + html_files[:3] + py_files[:2] + js_files[:2]:
+        if p and p not in seen:
+            seen.add(p)
+            to_check.append(p)
+
+    all_issues: List[str] = []
+    for rel_path in to_check:
+        if not (base / rel_path).exists():
+            continue
+        result = tool_validate_output(output_dir, rel_path)
+        if result and result != "No issues found" and not result.startswith("Validation not supported"):
+            all_issues.append(f"[{rel_path}]\n{result}")
+
+    return "\n\n".join(all_issues)
+
+
 def _validate_form_output(output_dir: str, demo_form: str) -> tuple[bool, str]:
     """Check that the generated files match the expected form."""
     base = Path(output_dir)
@@ -885,6 +924,22 @@ def _run_research_phase(
             arg_preview = str(list(tc.arguments.values())[:1])[:60]
             on_emit(f"  ◆ {tc.name}({arg_preview})\n")
             result = dispatch_tool(tc.name, tc.arguments, output_dir)
+
+            # Fallback: if search_huggingface returns empty results, try web_search
+            if tc.name == "search_huggingface" and (
+                not result.strip()
+                or "no results" in result.lower()
+                or "0 results" in result.lower()
+                or result.strip() in ("{}", "[]", "No results found", "")
+            ):
+                query_val = tc.arguments.get("query", paper.title)
+                fallback_query = f"site:huggingface.co {query_val}"
+                on_emit(f"    ↳ search_huggingface returned empty — trying web_search fallback\n")
+                fallback_result = dispatch_tool(
+                    "web_search", {"query": fallback_query}, output_dir
+                )
+                result = f"[HuggingFace web fallback for '{query_val}']\n{fallback_result}"
+
             on_emit(f"    → {result[:150]}\n")
             if use_openai_fmt:
                 messages.append(_openai_tool_result_message(tc, result))
@@ -917,11 +972,14 @@ _LARGE_FILE_FORMS = frozenset([
 ])
 
 _SKELETON_FIRST_MESSAGE = (
-    "IMPORTANT: Write files using a skeleton-first approach:\n"
-    "1. First write the main file with the COMPLETE structure but placeholder content "
-    "(comments like <!-- TODO: results section -->)\n"
-    "2. Then use additional write_file calls to overwrite with full content section by section\n"
-    "3. This prevents max_tokens truncation. NEVER try to write a 500+ line file in a single call."
+    "CRITICAL — FILE SIZE LIMIT: NEVER write a file longer than 300 lines in a single write_file call.\n"
+    "For this output form, you MUST split into separate files and write them in this order:\n"
+    "  1. styles.css  — ALL CSS rules (write this first)\n"
+    "  2. script.js   — ALL JavaScript (write this second)\n"
+    "  3. Main file (index.html / demo.html) — HTML skeleton only, referencing styles.css + script.js\n"
+    "     Use <link rel='stylesheet' href='styles.css'> and <script src='script.js'></script>\n"
+    "  4. Overwrite individual sections of the main file if more content is needed\n"
+    "If you attempt to write a 500+ line file in one shot it WILL be truncated and fail. Split first."
 )
 
 # Tools that are safe to run in parallel (no side effects on shared state)
@@ -1055,8 +1113,14 @@ def _run_loop(
                 on_emit(f"  ↳ Compacted context: {before_len} → {len(messages)} messages\n")
 
         on_emit(f"  [{phase_label}iter {iteration + 1}] calling model...\n")
+        # Adaptive token budget: early build iterations are planning/searching
+        # (8 192 is plenty); later iterations write large files (need 16 384).
+        if is_build and iteration < 2:
+            _max_tokens = 8192
+        else:
+            _max_tokens = 16384
         response = _chat_with_retry(
-            provider, messages, system, TOOLS, 16384, on_emit
+            provider, messages, system, TOOLS, _max_tokens, on_emit
         )
 
         if response.content:
@@ -1250,7 +1314,7 @@ def generate(
             output_dir=output_dir,
             use_openai_fmt=use_oai,
             on_emit=_emit,
-            max_iter=max(2, min(3, max_iter // 6)),
+            max_iter=2,  # capped at 2 — avoids token waste on search loops
         )
 
         # ── Phase 1b: Figure Pre-extraction (forms that embed PDF figures) ───
@@ -1274,9 +1338,10 @@ def generate(
         if pdf_survey:
             initial += pdf_survey
 
-        # Inject file-writing order hint for forms that produce multi-file HTML/CSS/JS output
-        if form in ("presentation", "website", "page_blog", "latex", "slides"):
+        # Inject skeleton-first hint BEFORE iteration 0 for large-file forms (Priority 1 fix)
+        if form in _LARGE_FILE_FORMS:
             initial += (
+                "\n\n" + _SKELETON_FIRST_MESSAGE +
                 "\n\nFILE WRITING ORDER: You MUST write files in this order:\n"
                 "1. styles.css (all CSS)\n"
                 "2. script.js or visualizations.js (all JavaScript)\n"
@@ -1334,6 +1399,41 @@ def generate(
             )
 
         _emit("\n✓ Generation complete.\n")
+
+        # ── Post-Polish: Auto-Validation (HTML/JS/Python quality) ────────
+        _emit("\n━━ Post-Polish Validation ━━\n")
+        val_issues = _auto_validate_files(output_dir, form)
+        if val_issues:
+            _emit(f"  ⚠ Validation issues found — requesting auto-fix...\n")
+            autofix_msg = (
+                "VALIDATION ISSUES FOUND — Fix ALL of these before finishing:\n\n"
+                + val_issues
+                + "\n\nFix every issue listed above:\n"
+                "  • Correct CDN URLs to exact pinned versions\n"
+                "  • Ensure all figures from figures/ directory are referenced\n"
+                "  • Fix any unclosed tags, broken relative paths, or JS errors\n"
+                "  • Verify dark theme consistency (no white/light backgrounds)\n"
+                "  • Check all interactive elements (buttons, sliders, links) work\n"
+            )
+            messages.append({"role": "user", "content": autofix_msg})
+            messages = _run_loop(
+                provider=provider,
+                messages=messages,
+                system=system,
+                output_dir=output_dir,
+                use_openai_fmt=use_oai,
+                on_emit=_emit,
+                max_iter=2,
+                phase_label="autofix-",
+            )
+            # Re-validate after fix
+            remaining = _auto_validate_files(output_dir, form)
+            if remaining:
+                _emit(f"  ⚠ Some issues remain after auto-fix:\n{remaining[:600]}\n")
+            else:
+                _emit("  ✓ All validation issues resolved.\n")
+        else:
+            _emit("  ✓ Validation passed — no issues found.\n")
 
         # ── Post-generation: Form Validation ─────────────────────────────
         is_valid, validation_error = _validate_form_output(output_dir, form)

@@ -12,6 +12,9 @@ Color palette (dark theme):
     Lines      : #475569    Lines light : #64748b
 """
 
+from __future__ import annotations
+from typing import Optional
+
 # ── colour constants ──────────────────────────────────────────────────
 BG       = "#09090b"
 BLUE     = "#3b82f6"
@@ -163,7 +166,7 @@ _ARROWHEAD_DEF = (
 
 
 def svg_wrapper(content: str, width: int = 800, height: int = 600,
-                bg: str = BG, viewBox: str | None = None) -> str:
+                bg: str = BG, viewBox: Optional[str] = None) -> str:
     """Wrap SVG content in a complete ``<svg>`` element with arrowhead defs.
 
     Example::

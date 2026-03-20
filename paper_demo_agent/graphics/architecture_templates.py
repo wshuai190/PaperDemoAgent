@@ -5,6 +5,9 @@ complete, self-contained SVG string that can be written to a ``.svg`` file
 or embedded in HTML.
 """
 
+from __future__ import annotations
+from typing import Optional
+
 from paper_demo_agent.graphics.svg_primitives import (
     BG, BLUE, INDIGO, AMBER, GREEN, RED, TEXT, MUTED, SLATE, SLATE_LT,
     rounded_box, arrow, flow_arrow, layer_stack, parallel_blocks,
@@ -13,7 +16,7 @@ from paper_demo_agent.graphics.svg_primitives import (
 
 
 def encoder_decoder(encoder_layers: list[str], decoder_layers: list[str],
-                    labels: dict[str, str] | None = None) -> str:
+                    labels: Optional[dict[str, str]] = None) -> str:
     """Standard encoder-decoder architecture (e.g. Transformer).
 
     Example::
@@ -226,7 +229,7 @@ def comparison_diagram(method_a: list[str], method_b: list[str],
 
 
 def attention_visualization(query_labels: list[str], key_labels: list[str],
-                            weights_matrix: list[list[float]] | None = None) -> str:
+                            weights_matrix: Optional[list[list[float]]] = None) -> str:
     """Attention weight heatmap rendered as SVG rects.
 
     Example::
