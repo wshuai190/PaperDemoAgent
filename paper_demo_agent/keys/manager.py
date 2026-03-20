@@ -91,16 +91,53 @@ class KeyManager:
         Returns a JSON string: {"token": access_token, "projectId": projectId}
         which is what the Gemini provider expects for Cloud Code Assist auth.
         """
-        # 1. Try macOS Keychain
+        # 1. ~/.gemini/oauth_creds.json (standard Gemini CLI on all platforms)
+        token_data = self._detect_gemini_cli_file()
+        if token_data:
+            return token_data
+
+        # 2. Try macOS Keychain
         token_data = self._detect_gemini_cli_keychain()
         if token_data:
             return token_data
 
-        # 2. Try OpenClaw auth-profiles (google-gemini-cli provider)
+        # 3. Try OpenClaw auth-profiles (google-gemini-cli provider)
         token_data = self._detect_gemini_cli_openclaw()
         if token_data:
             return token_data
 
+        return None
+
+    def _detect_gemini_cli_file(self) -> Optional[str]:
+        """Read Gemini CLI OAuth credentials from ~/.gemini/oauth_creds.json."""
+        import time
+        cred_path = Path.home() / ".gemini" / "oauth_creds.json"
+        if not cred_path.exists():
+            return None
+        try:
+            data = json.loads(cred_path.read_text())
+            access_token = data.get("access_token")
+            refresh_token = data.get("refresh_token")
+            expiry_ms = data.get("expiry_date", 0)
+
+            # Refresh if expired (with 5-min buffer)
+            if access_token and expiry_ms and expiry_ms < self._now_ms() + 300_000:
+                if refresh_token:
+                    refreshed = self._refresh_gemini_cli_token(refresh_token, "")
+                    if refreshed:
+                        access_token = refreshed["access"]
+                        data["access_token"] = access_token
+                        data["refresh_token"] = refreshed.get("refresh", refresh_token)
+                        data["expiry_date"] = refreshed["expires"]
+                        try:
+                            cred_path.write_text(json.dumps(data, indent=2))
+                        except Exception:
+                            pass
+
+            if access_token:
+                return json.dumps({"token": access_token})
+        except Exception:
+            pass
         return None
 
     @staticmethod

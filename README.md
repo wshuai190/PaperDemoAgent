@@ -21,13 +21,9 @@
 
 ## What's New in v0.3.0
 
-- **Claude Code OAuth** — Use your Claude Pro/Max subscription directly via `claude auth login`. No API key needed. Credentials are auto-detected from the macOS Keychain or `~/.claude/`.
-- **`claude setup-token` support** — Generate a long-lived token with `claude setup-token` and save it as your key for persistent subscription auth.
-- **6 new output formats** — PowerPoint (`python-pptx`), LaTeX/Beamer, Blog Article, GitHub README, Streamlit App, Graphviz Diagram.
-- **13 specialized skills** — Expanded from 8 to 13 skills covering all major paper types.
-- **PDF Survey phase** — Agent scans paper figures/tables before building to eliminate guessed crop coordinates.
-- **Prior-work research** — Research phase now identifies and searches foundational papers from the related-work section.
-- **`list_files` tool** — Agents can see generated files without guessing paths.
+- **Claude Code OAuth** — Use your Claude Pro/Max subscription directly. Auto-detected from the macOS Keychain or `~/.claude/` after `claude auth login`. No API key needed.
+- **`claude setup-token` support** — Generate a long-lived token with `claude setup-token` and save it with `paper-demo-agent key set ANTHROPIC_API_KEY <token>`.
+- **Gemini CLI auto-detection** — Auto-detects credentials from `~/.gemini/oauth_creds.json` after running `gemini`. No Google API key needed.
 
 ---
 
@@ -42,8 +38,8 @@ pip install paper-demo-agent
 claude auth login               # one-time: sign into claude.ai
 paper-demo-agent demo 1706.03762
 
-# Option B: Use Gemini via gcloud ADC (free tier)
-gcloud auth application-default login   # one-time: sign into Google
+# Option B: Use Gemini CLI (free tier)
+gemini                          # one-time: sign into Google
 paper-demo-agent demo 1706.03762 --provider gemini
 
 # Option C: Traditional API key
@@ -203,6 +199,7 @@ Paper Demo Agent automatically detects credentials from CLI tools you already us
 | Tool | Auth Method | Provides | Setup |
 |---|---|---|---|
 | **Claude Code** | OAuth (macOS Keychain / `~/.claude/`) | `ANTHROPIC_API_KEY` | `claude auth login` — uses your Pro/Max subscription |
+| **Gemini CLI** | OAuth (`~/.gemini/oauth_creds.json`) | `GOOGLE_API_KEY` | `gemini` — free tier: 60 req/min, 1000 req/day |
 | **OpenAI Codex CLI** | `~/.codex/auth.json` | `OPENAI_API_KEY` | Auto-detected |
 | **Aider** | `~/.aider.conf.yml` | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Auto-detected |
 | **gcloud ADC** | Application Default Credentials | Gemini auth | `gcloud auth application-default login` |

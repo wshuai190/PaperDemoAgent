@@ -83,7 +83,7 @@ class GeminiProvider(BaseLLMProvider):
             return False
         try:
             data = json.loads(self.api_key)
-            return isinstance(data, dict) and "token" in data and "projectId" in data
+            return isinstance(data, dict) and "token" in data
         except (json.JSONDecodeError, TypeError):
             return False
 
@@ -94,7 +94,7 @@ class GeminiProvider(BaseLLMProvider):
             raise ImportError("google-generativeai is required: pip install google-generativeai")
 
         if self.api_key and self._is_gemini_cli_token:
-            # Gemini CLI credential: use OAuth access token via google.oauth2
+            # Gemini CLI OAuth token — use Bearer auth via google.oauth2.credentials
             data = json.loads(self.api_key)
             access_token = data["token"]
             try:
@@ -102,7 +102,6 @@ class GeminiProvider(BaseLLMProvider):
                 credentials = Credentials(token=access_token)
                 genai.configure(credentials=credentials)
             except ImportError:
-                # Fallback: set as API key (may not work for all endpoints)
                 genai.configure(api_key=access_token)
         elif self.api_key:
             # Fall back to Application Default Credentials (gcloud auth application-default login)
