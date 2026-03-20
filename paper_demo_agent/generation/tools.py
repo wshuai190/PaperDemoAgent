@@ -363,8 +363,11 @@ _WRITE_FILE_MAX_LINES = 300
 _WRITE_FILE_HARD_MAX = 800  # absolute max for single-file forms
 _WRITE_FILE_SPLIT_MAX = 400  # max for files that should be split (CSS, JS, etc.)
 
-# Single-file forms where the main file is allowed to be larger
-_SINGLE_FILE_MAIN = {"demo.html", "presentation.tex", "main.tex", "index.html"}
+# Files allowed to be larger (main output files)
+_SINGLE_FILE_MAIN = {
+    "demo.html", "presentation.tex", "main.tex", "index.html",
+    "app.py", "build.py", "main.py",  # Python apps/scripts can be large
+}
 
 
 def tool_write_file(output_dir: str, path: str, content: str) -> str:
