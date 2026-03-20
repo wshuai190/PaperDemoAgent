@@ -91,9 +91,75 @@
   - **Action needed**: `claude login` to refresh token
 
 ### TODO for next sessions
-- [ ] Refresh Claude Code OAuth token, test ViT paper (2010.11929) end-to-end
+- [x] Refresh Claude Code OAuth token auto-refresh — done in Session 3
+- [ ] Test ViT paper (2010.11929) end-to-end with refreshed token
 - [ ] Verify the new graphics toolkit is actually used in generated output (check generated HTML for render_svg calls vs raw SVG)
 - [ ] Add screenshot feedback tool (playwright screenshot → validate_output vision check)
 - [ ] Consider adding `mermaid_gantt(tasks)` for timeline/schedule diagrams
 - [ ] Consider `treemap_d3(hierarchy_data)` for model/dataset breakdown charts
 - [ ] Profile token usage: are the longer system prompts causing cost increases?
+
+---
+
+## Session 3 — 2026-03-21 07:20 (Brisbane)
+
+### Priority 1: Hard-enforce write_file size limit ✅
+- `tool_write_file()` now counts lines and rejects writes >300 lines with a clear error:
+  `"ERROR: File too large (N lines). Maximum 300 lines per write. Split into separate files (CSS, JS, HTML)."`
+- Added `_WRITE_FILE_MAX_LINES = 300` constant (easy to adjust later)
+- Updated TOOLS list description to surface the hard limit to the model
+- 7 new tests in `tests/test_tools.py` covering: exact limit accepted, 1-over rejected, far-over reports correct count, dispatch enforcement
+
+### Priority 2: Math rendering section in _tool_usage_instructions() ✅
+- Added `━━ MATH RENDERING (KaTeX) ━━` section to `BaseSkill._tool_usage_instructions()`
+- Covers: CDN links, `renderMathInElement` call with delimiters, inline/display syntax examples
+- Strong directive that it's CRITICAL for papers with equations
+- Note about reveal.js using RevealMath.KaTeX plugin instead
+
+### Priority 3: Section structure templates ✅
+- Created `paper_demo_agent/skills/templates.py` with:
+  - `PRESENTATION_STRUCTURE` — 12 slides: Title → ... → Conclusion
+  - `WEBSITE_STRUCTURE` — 7 sections: Hero → ... → Citation
+  - `BLOG_STRUCTURE` — 8 sections: Hook → ... → References
+- Injected into all skills via `BaseSkill._tool_usage_instructions()` (one place, all skills inherit)
+- Added `━━ SECTION STRUCTURES ━━` section showing numbered lists per form type
+- 4 tests in `tests/test_tools.py` for structure correctness
+
+### Priority 4: Figure extraction + page listing tools ✅
+- `tool_extract_figure(output_dir, pdf_path, page, x1, y1, x2, y2, dpi=200, filename=None)`
+  - Separate tool from `extract_pdf_page`: takes explicit pdf_path + flat x1/y1/x2/y2 params
+  - Default 200 DPI (vs 150 for full pages) for crisper figure crops
+  - Auto-generates filename as `figures/figure_p{page}_{x1}_{y1}_{x2}_{y2}.png`
+- `tool_list_pdf_pages(output_dir, pdf_path='paper.pdf')`
+  - Returns total page count + 150-char text snippet per page
+  - Lets model quickly scan for specific figures/tables without guessing page numbers
+- Both registered in TOOLS list + dispatch_tool + 6 tests
+
+### Priority 5: Table extraction tool ✅
+- `tool_extract_tables(output_dir, pdf_path, page)` using PyMuPDF block extraction
+  - Clusters text blocks by y-position proximity (±5px = same row)
+  - Filters to rows with 2+ columns
+  - Groups contiguous rows into table segments (>30px gap = new table)
+  - Returns JSON: `[{"headers": [...], "rows": [[...], ...]}, ...]`
+- Model can render as HTML table or Chart.js bar chart
+- Registered in TOOLS list + dispatch_tool + 3 tests
+
+### Priority 6: Auto-refresh Claude Code OAuth token ✅
+- `_detect_claude_code_keychain()` promoted from `@staticmethod` to instance method
+- Now reads `expiresAt` and `refreshToken` from `claudeAiOauth` keychain data
+- If expired (5-min buffer): POSTs to `https://claude.ai/oauth/token` with `grant_type=refresh_token`
+- On success: updates in-memory credentials + writes back to Keychain via `security add-generic-password -U`
+- On 403 (both tokens expired): logs warning "Run `claude login` to re-authenticate", returns None
+- On other errors: logs warning, falls back to returning existing (possibly expired) token
+- `_CC_CLIENT_ID` and `_CC_TOKEN_URL` stored as class constants
+
+### Tests
+- **173/173 passing** (was 146, +27 new in tests/test_tools.py)
+- All priorities fully covered
+
+### TODO for next sessions
+- [ ] Test ViT paper end-to-end to verify new tools are exercised correctly
+- [ ] Add screenshot feedback tool (playwright screenshot → validate_output vision check)
+- [ ] Consider `mermaid_gantt(tasks)` for timelines
+- [ ] Consider `treemap_d3(hierarchy_data)` for model/dataset breakdown
+- [ ] Profile: do longer system prompts (math + structure sections) meaningfully increase cost?

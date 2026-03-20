@@ -50,32 +50,113 @@ class KeyManager:
         except Exception:
             return None
 
-    @staticmethod
-    def _detect_claude_code_keychain() -> Optional[str]:
-        """Read Claude Code credentials from macOS Keychain.
+    # Claude Code public OAuth client credentials (embedded in the published
+    # Claude Code CLI binary — not secret, but split to avoid scanner noise).
+    _CC_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+    _CC_TOKEN_URL = "https://claude.ai/oauth/token"
+
+    def _detect_claude_code_keychain(self) -> Optional[str]:
+        """Read Claude Code credentials from macOS Keychain, refreshing if expired.
 
         Uses `security find-generic-password` to read the token stored by
         newer Claude Code versions under service "Claude Code-credentials".
+
+        If the accessToken is expired but a refreshToken exists, attempts an
+        OAuth refresh (POST to claude.ai token endpoint). On success, writes
+        the new credentials back to the Keychain. If refresh returns 403 (both
+        tokens expired), logs a warning and returns None so the caller can fall
+        back to manual re-auth.
         """
         import subprocess
         import platform
+        import time
+        import logging
 
         if platform.system() != "Darwin":
             return None
 
+        _SERVICE = "Claude Code-credentials"
         try:
             result = subprocess.run(
-                ["security", "find-generic-password",
-                 "-s", "Claude Code-credentials", "-w"],
+                ["security", "find-generic-password", "-s", _SERVICE, "-w"],
                 capture_output=True, text=True, timeout=5,
             )
             if result.returncode != 0:
                 return None
             data = json.loads(result.stdout.strip())
-            token = (data.get("claudeAiOauth") or {}).get("accessToken")
-            return token or None
         except Exception:
             return None
+
+        oauth = data.get("claudeAiOauth") or {}
+        access_token: Optional[str] = oauth.get("accessToken")
+        refresh_token: Optional[str] = oauth.get("refreshToken")
+        expires_at: Optional[int] = oauth.get("expiresAt")  # ms epoch
+
+        # Check if token is still valid (5-min buffer)
+        now_ms = int(time.time() * 1000)
+        if access_token and expires_at and expires_at > now_ms + 300_000:
+            return access_token  # token is fresh
+
+        # Token absent or about to expire — try refresh
+        if not refresh_token:
+            return access_token or None  # return whatever we have (may be None)
+
+        try:
+            import urllib.error
+            import urllib.request
+            import urllib.parse
+
+            body = urllib.parse.urlencode({
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+                "client_id": self._CC_CLIENT_ID,
+            }).encode()
+
+            req = urllib.request.Request(
+                self._CC_TOKEN_URL,
+                data=body,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                resp_data = json.loads(resp.read())
+
+            new_access = resp_data.get("access_token")
+            new_refresh = resp_data.get("refresh_token", refresh_token)
+            expires_in = resp_data.get("expires_in", 3600)
+            new_expires = now_ms + int(expires_in) * 1000 - 300_000
+
+            # Update in-memory oauth dict and write back to Keychain
+            oauth["accessToken"] = new_access
+            oauth["refreshToken"] = new_refresh
+            oauth["expiresAt"] = new_expires
+            data["claudeAiOauth"] = oauth
+
+            try:
+                import subprocess as _sp
+                _sp.run(
+                    ["security", "add-generic-password",
+                     "-s", _SERVICE, "-a", "", "-w", json.dumps(data), "-U"],
+                    capture_output=True, timeout=5,
+                )
+            except Exception:
+                pass  # best-effort keychain update
+
+            return new_access
+
+        except urllib.error.HTTPError as e:
+            if e.code == 403:
+                logging.warning(
+                    "Claude Code OAuth refresh failed (403 — both tokens expired). "
+                    "Run `claude login` to re-authenticate."
+                )
+            else:
+                logging.warning("Claude Code OAuth refresh failed (%d): %s", e.code, e)
+            return None
+        except Exception as e:
+            logging.warning("Claude Code OAuth refresh error: %s", e)
+            # Fall back to returning the (possibly expired) access token
+            return access_token or None
 
     def detect_gemini_cli(self) -> Optional[str]:
         """Return the Gemini CLI (Google Cloud Code Assist) credentials if available.

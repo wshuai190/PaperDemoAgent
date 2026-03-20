@@ -1006,8 +1006,43 @@ Step 4 ── REQUIREMENTS + DONE
     def _tool_usage_instructions(self) -> str:
         cdn = self._cdn_urls()
         cdn_block = "\n".join(f"    {k:<28} {v}" for k, v in cdn.items())
+        from paper_demo_agent.skills.templates import (
+            PRESENTATION_STRUCTURE, WEBSITE_STRUCTURE, BLOG_STRUCTURE,
+        )
+        pres_steps = "\n".join(f"    {i+1:2}. {s}" for i, s in enumerate(PRESENTATION_STRUCTURE))
+        web_steps  = "\n".join(f"    {i+1:2}. {s}" for i, s in enumerate(WEBSITE_STRUCTURE))
+        blog_steps = "\n".join(f"    {i+1:2}. {s}" for i, s in enumerate(BLOG_STRUCTURE))
         return f"""━━ VERIFIED CDN URLS (use verbatim — do NOT search for alternatives) ━━
 {cdn_block}
+
+━━ MATH RENDERING (KaTeX) ━━
+
+  For ANY mathematical equations, use KaTeX. Include these in your HTML <head>:
+    <link rel="stylesheet" href="{cdn['katex_css']}">
+    <script src="{cdn['katex_js']}"></script>
+    <script src="{cdn['katex_auto_render']}"></script>
+  Then call on DOMContentLoaded:
+    document.addEventListener('DOMContentLoaded', () => renderMathInElement(document.body, {{
+      delimiters: [
+        {{left: '\\\\[', right: '\\\\]', display: true}},
+        {{left: '\\\\(', right: '\\\\)', display: false}}
+      ]
+    }}));
+  Inline math:   \\( f(x) = e^x \\)
+  Display math:  \\[ \\mathcal{{L}} = -\\log p(y|x) \\]
+  This is CRITICAL for papers with equations — the demo must render them beautifully.
+  For reveal.js: use RevealMath.KaTeX plugin (already in CDN list above); delimiters are $$...$$
+
+━━ SECTION STRUCTURES (follow these in order — adapt to paper content) ━━
+
+  Presentation:
+{pres_steps}
+
+  Website / Project Page:
+{web_steps}
+
+  Blog Post:
+{blog_steps}
 
 ━━ TOOL USAGE RULES ━━
 

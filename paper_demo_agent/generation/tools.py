@@ -24,7 +24,11 @@ TOOLS: List[Dict] = [
     },
     {
         "name": "write_file",
-        "description": "Write content to a file in the output directory. Paths are relative to the output directory.",
+        "description": (
+            "Write content to a file in the output directory. Paths are relative to the output directory. "
+            "HARD LIMIT: maximum 300 lines per call — the tool will REJECT writes over 300 lines with an error. "
+            "Always split large files (CSS → style.css, JS → script.js, HTML skeleton → index.html) BEFORE writing."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
@@ -162,6 +166,81 @@ TOOLS: List[Dict] = [
         },
     },
     {
+        "name": "extract_tables",
+        "description": (
+            "Extract table-like text structures from a PDF page and return them as JSON. "
+            "Returns a list of tables: [{headers: [...], rows: [[...], ...]}, ...]. "
+            "Use this to get numerical results, comparison tables, or ablation data — "
+            "then render as an HTML table or Chart.js bar chart."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pdf_path": {
+                    "type": "string",
+                    "description": "Relative path to the PDF file (e.g. 'paper.pdf')",
+                },
+                "page": {
+                    "type": "integer",
+                    "description": "Page number (1-indexed)",
+                },
+            },
+            "required": ["pdf_path", "page"],
+        },
+    },
+    {
+        "name": "extract_figure",
+        "description": (
+            "Extract a specific figure/diagram region from a PDF page using fractional coordinates. "
+            "x1/y1 = top-left corner, x2/y2 = bottom-right corner (all 0.0–1.0 fractions of page size). "
+            "Saves the cropped region as a PNG to the figures/ directory. "
+            "Use this to precisely isolate a figure when you know its location on the page."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pdf_path": {
+                    "type": "string",
+                    "description": "Relative path to the PDF file (e.g. 'paper.pdf')",
+                },
+                "page": {
+                    "type": "integer",
+                    "description": "Page number (1-indexed)",
+                },
+                "x1": {"type": "number", "description": "Left edge fraction (0.0–1.0)"},
+                "y1": {"type": "number", "description": "Top edge fraction (0.0–1.0)"},
+                "x2": {"type": "number", "description": "Right edge fraction (0.0–1.0)"},
+                "y2": {"type": "number", "description": "Bottom edge fraction (0.0–1.0)"},
+                "dpi": {
+                    "type": "integer",
+                    "description": "Render resolution in DPI (default: 200 for crisp figures)",
+                },
+                "filename": {
+                    "type": "string",
+                    "description": "Output filename (default: figures/figure_p{page}_....png)",
+                },
+            },
+            "required": ["pdf_path", "page", "x1", "y1", "x2", "y2"],
+        },
+    },
+    {
+        "name": "list_pdf_pages",
+        "description": (
+            "Return the total page count and a brief text snippet from each page of a PDF. "
+            "Use this to find which page contains a specific figure, table, or result you want to extract."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pdf_path": {
+                    "type": "string",
+                    "description": "Relative path to the PDF file (default: 'paper.pdf')",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
         "name": "render_svg",
         "description": (
             "Evaluate a Python expression using the graphics primitives module "
@@ -256,7 +335,17 @@ def _safe_path(output_dir: str, relative_path: str) -> Path:
     return target
 
 
+_WRITE_FILE_MAX_LINES = 300
+
+
 def tool_write_file(output_dir: str, path: str, content: str) -> str:
+    line_count = content.count("\n") + 1
+    if line_count > _WRITE_FILE_MAX_LINES:
+        return (
+            f"ERROR: File too large ({line_count} lines). "
+            f"Maximum {_WRITE_FILE_MAX_LINES} lines per write. "
+            f"Split into separate files (CSS, JS, HTML)."
+        )
     target = _safe_path(output_dir, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
@@ -436,6 +525,158 @@ def tool_extract_pdf_page(
         return f"Saved {out_filename} ({size_str}{crop_note})"
     except Exception as e:
         return f"extract_pdf_page error: {e}"
+
+
+def tool_extract_figure(
+    output_dir: str,
+    pdf_path: str,
+    page: int,
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    dpi: int = 200,
+    filename: Optional[str] = None,
+) -> str:
+    """Extract a specific figure region from a PDF page using fractional coords."""
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return "Error: PyMuPDF not installed. Run: pip install pymupdf"
+
+    full_path = _safe_path(output_dir, pdf_path)
+    if not full_path.exists():
+        return f"Error: PDF not found: {pdf_path}"
+
+    try:
+        doc = fitz.open(str(full_path))
+        total_pages = len(doc)
+        if page < 1 or page > total_pages:
+            return f"Error: page {page} out of range (PDF has {total_pages} pages, 1-indexed)"
+
+        pg = doc[page - 1]
+        rect = pg.rect
+        w, h = rect.width, rect.height
+        clip = fitz.Rect(x1 * w, y1 * h, x2 * w, y2 * h)
+        mat = fitz.Matrix(dpi / 72, dpi / 72)
+        pix = pg.get_pixmap(matrix=mat, clip=clip)
+
+        out_filename = filename or f"figures/figure_p{page}_{x1:.2f}_{y1:.2f}_{x2:.2f}_{y2:.2f}.png"
+        target = _safe_path(output_dir, out_filename)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        pix.save(str(target))
+
+        size_str = f"{pix.width}×{pix.height}px"
+        return f"Saved {out_filename} ({size_str}, {dpi}dpi, crop=[{x1:.2f},{y1:.2f},{x2:.2f},{y2:.2f}])"
+    except Exception as e:
+        return f"extract_figure error: {e}"
+
+
+def tool_extract_tables(output_dir: str, pdf_path: str, page: int) -> str:
+    """Extract table-like structures from a PDF page and return them as JSON.
+
+    Uses PyMuPDF block extraction: identifies rows by clustering text blocks
+    that share the same y-coordinate band, then groups into columns by x position.
+    Returns JSON: [{headers: [...], rows: [[...], ...]}, ...]
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return "Error: PyMuPDF not installed. Run: pip install pymupdf"
+
+    full_path = _safe_path(output_dir, pdf_path)
+    if not full_path.exists():
+        return f"Error: PDF not found: {pdf_path}"
+
+    try:
+        doc = fitz.open(str(full_path))
+        total_pages = len(doc)
+        if page < 1 or page > total_pages:
+            return f"Error: page {page} out of range (PDF has {total_pages} pages, 1-indexed)"
+
+        pg = doc[page - 1]
+        blocks = pg.get_text("blocks")
+        # Each block: (x0, y0, x1, y1, text, block_no, block_type)
+        # type 0 = text, type 1 = image
+        text_blocks = [
+            (b[0], b[1], b[2], b[3], b[4].strip())
+            for b in blocks if b[6] == 0 and b[4].strip()
+        ]
+
+        if not text_blocks:
+            return json.dumps([])
+
+        # Cluster blocks into rows by y0 proximity (within 5px = same row)
+        Y_TOLERANCE = 5.0
+        rows: list[list] = []
+        for blk in sorted(text_blocks, key=lambda b: (round(b[1] / Y_TOLERANCE), b[0])):
+            placed = False
+            for row in rows:
+                if abs(row[0][1] - blk[1]) <= Y_TOLERANCE:
+                    row.append(blk)
+                    placed = True
+                    break
+            if not placed:
+                rows.append([blk])
+
+        # Only keep rows with 2+ columns (table-like)
+        table_rows = [
+            sorted(r, key=lambda b: b[0])  # sort by x position
+            for r in rows if len(r) >= 2
+        ]
+
+        if len(table_rows) < 2:
+            return json.dumps([])  # not enough rows to form a table
+
+        # Group into contiguous table segments (gap > 30px y-distance = new table)
+        tables: list[list] = []
+        current_table: list = []
+        prev_y = None
+        for row in sorted(table_rows, key=lambda r: r[0][1]):
+            y0 = row[0][1]
+            if prev_y is not None and (y0 - prev_y) > 30:
+                if len(current_table) >= 2:
+                    tables.append(current_table)
+                current_table = []
+            current_table.append(row)
+            prev_y = y0
+        if len(current_table) >= 2:
+            tables.append(current_table)
+
+        result = []
+        for tbl in tables:
+            headers = [b[4] for b in tbl[0]]
+            body_rows = [[b[4] for b in row] for row in tbl[1:]]
+            result.append({"headers": headers, "rows": body_rows})
+
+        return json.dumps(result, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return f"extract_tables error: {e}"
+
+
+def tool_list_pdf_pages(output_dir: str, pdf_path: str = "paper.pdf") -> str:
+    """Return page count and a brief text snippet per page so the model knows where to look."""
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        return "Error: PyMuPDF not installed. Run: pip install pymupdf"
+
+    full_path = _safe_path(output_dir, pdf_path)
+    if not full_path.exists():
+        return f"Error: PDF not found: {pdf_path}"
+
+    try:
+        doc = fitz.open(str(full_path))
+        total = len(doc)
+        lines = [f"Total pages: {total}"]
+        for i, pg in enumerate(doc, start=1):
+            text = pg.get_text("text").strip()
+            # Keep first 150 chars, collapse whitespace
+            snippet = " ".join(text.split())[:150]
+            lines.append(f"  Page {i:3d}: {snippet}")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"list_pdf_pages error: {e}"
 
 
 def tool_render_svg(expr: str) -> str:
@@ -699,6 +940,29 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], output_dir: str) ->
                 dpi=int(arguments.get("dpi", 150)),
                 crop=arguments.get("crop"),
                 filename=arguments.get("filename"),
+            )
+        elif tool_name == "extract_tables":
+            return tool_extract_tables(
+                output_dir,
+                arguments["pdf_path"],
+                page=int(arguments["page"]),
+            )
+        elif tool_name == "extract_figure":
+            return tool_extract_figure(
+                output_dir,
+                arguments["pdf_path"],
+                page=int(arguments["page"]),
+                x1=float(arguments["x1"]),
+                y1=float(arguments["y1"]),
+                x2=float(arguments["x2"]),
+                y2=float(arguments["y2"]),
+                dpi=int(arguments.get("dpi", 200)),
+                filename=arguments.get("filename"),
+            )
+        elif tool_name == "list_pdf_pages":
+            return tool_list_pdf_pages(
+                output_dir,
+                arguments.get("pdf_path", "paper.pdf"),
             )
         elif tool_name == "render_svg":
             return tool_render_svg(arguments["expr"])
