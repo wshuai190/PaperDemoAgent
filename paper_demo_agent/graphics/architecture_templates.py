@@ -228,6 +228,357 @@ def comparison_diagram(method_a: list[str], method_b: list[str],
     return svg_wrapper("\n".join(parts), width=total_w, height=h)
 
 
+def cnn_architecture(layers_config: list[dict]) -> str:
+    """CNN architecture with conv, pool, and fc layers.
+
+    *layers_config* is a list of dicts with keys:
+      - ``type``: "conv" | "pool" | "fc" | "input" | "output"
+      - ``label``: display string (e.g. "Conv 3×3, 64")
+      - ``size`` (optional): relative visual height (default 60)
+
+    Example::
+
+        cnn_architecture([
+            {"type": "input",  "label": "Input\\n224×224×3"},
+            {"type": "conv",   "label": "Conv 3×3\\n64 filters"},
+            {"type": "pool",   "label": "MaxPool\\n2×2"},
+            {"type": "conv",   "label": "Conv 3×3\\n128 filters"},
+            {"type": "pool",   "label": "MaxPool\\n2×2"},
+            {"type": "fc",     "label": "FC 1024"},
+            {"type": "output", "label": "Softmax"},
+        ])
+    """
+    _type_color = {
+        "input":  BLUE,
+        "conv":   INDIGO,
+        "pool":   SLATE,
+        "fc":     AMBER,
+        "output": GREEN,
+    }
+
+    box_w, box_gap = 110, 50
+    margin = 40
+    title_h = 40
+    max_h = 80
+
+    parts: list[str] = []
+    parts.append(
+        f'<text x="{(len(layers_config) * (box_w + box_gap) + margin) / 2}" '
+        f'y="26" text-anchor="middle" fill="{TEXT}" '
+        f'font-family="Inter,system-ui,sans-serif" font-size="15" '
+        f'font-weight="700">CNN Architecture</text>'
+    )
+
+    for i, layer in enumerate(layers_config):
+        ltype = layer.get("type", "fc")
+        label = layer.get("label", ltype)
+        h = min(max_h, max(36, layer.get("size", 60)))
+        color = _type_color.get(ltype, INDIGO)
+        x = margin + i * (box_w + box_gap)
+        y = title_h + (max_h - h) // 2
+
+        # featuremap-style boxes for conv/pool
+        if ltype in ("conv", "pool"):
+            offset = 6
+            for d in range(2, -1, -1):
+                parts.append(
+                    f'<rect x="{x + d * offset}" y="{y + d * offset}" '
+                    f'width="{box_w}" height="{h}" rx="4" '
+                    f'fill="{color}" opacity="{0.4 + d * 0.2:.1f}" />'
+                )
+            parts.append(
+                f'<text x="{x + box_w / 2 + 6}" y="{y + h / 2 + 6}" '
+                f'text-anchor="middle" dominant-baseline="central" '
+                f'fill="#fafafa" font-family="Inter,system-ui,sans-serif" '
+                f'font-size="11" font-weight="600">{label}</text>'
+            )
+        else:
+            parts.append(rounded_box(x, y, box_w, h, label, color=color))
+
+        if i < len(layers_config) - 1:
+            mid_y = title_h + max_h / 2
+            parts.append(arrow(x + box_w + (offset * 2 if ltype in ("conv", "pool") else 0),
+                               mid_y, x + box_w + box_gap, mid_y))
+
+    total_w = margin * 2 + len(layers_config) * (box_w + box_gap)
+    total_h = title_h + max_h + margin
+    return svg_wrapper("\n".join(parts), width=total_w, height=total_h)
+
+
+def rnn_cell(cell_type: str = "lstm") -> str:
+    """LSTM or GRU cell diagram with gate annotations.
+
+    *cell_type* is either ``"lstm"`` (default) or ``"gru"``.
+
+    Example::
+
+        rnn_cell(cell_type="lstm")
+        rnn_cell(cell_type="gru")
+    """
+    parts: list[str] = []
+    title = cell_type.upper() + " Cell"
+
+    if cell_type.lower() == "lstm":
+        gates = [
+            ("Forget\\nGate", RED,    "σ", 80,  100),
+            ("Input\\nGate",  BLUE,   "σ", 220, 100),
+            ("Cell\\nGate",   INDIGO, "tanh", 360, 100),
+            ("Output\\nGate", GREEN,  "σ", 500, 100),
+        ]
+        # cell state line
+        parts.append(
+            f'<line x1="40" y1="70" x2="640" y2="70" '
+            f'stroke="{AMBER}" stroke-width="2.5" '
+            f'stroke-dasharray="6 3" />'
+        )
+        parts.append(
+            f'<text x="50" y="58" fill="{AMBER}" '
+            f'font-family="Inter,system-ui,sans-serif" font-size="11">c_{{t-1}}</text>'
+        )
+        parts.append(
+            f'<text x="608" y="58" fill="{AMBER}" '
+            f'font-family="Inter,system-ui,sans-serif" font-size="11">c_t</text>'
+        )
+        total_w, total_h = 700, 240
+    else:  # gru
+        gates = [
+            ("Update\\nGate", BLUE,   "σ",    100, 100),
+            ("Reset\\nGate",  RED,    "σ",    300, 100),
+            ("New Gate",      INDIGO, "tanh", 500, 100),
+        ]
+        total_w, total_h = 660, 220
+
+    # hidden state input/output
+    parts.append(
+        f'<text x="40" y="{total_h - 60}" fill="{MUTED}" '
+        f'font-family="Inter,system-ui,sans-serif" font-size="12">h_{{t-1}}</text>'
+    )
+    parts.append(
+        f'<text x="{total_w - 80}" y="{total_h - 60}" fill="{TEXT}" '
+        f'font-family="Inter,system-ui,sans-serif" font-size="12">h_t</text>'
+    )
+
+    for label, color, act, gx, gy in gates:
+        parts.append(rounded_box(gx, gy, 100, 70, f"{label}\\n({act})", color=color))
+        parts.append(arrow(gx + 50, 80, gx + 50, gy))  # from cell state
+        parts.append(arrow(gx + 50, gy + 70, gx + 50, gy + 100))  # down to combine
+
+    # title
+    parts.append(
+        f'<text x="{total_w / 2}" y="30" text-anchor="middle" fill="{TEXT}" '
+        f'font-family="Inter,system-ui,sans-serif" font-size="15" font-weight="700">'
+        f'{title}</text>'
+    )
+
+    return svg_wrapper("\n".join(parts), width=total_w, height=total_h)
+
+
+def residual_block(num_layers: int = 2) -> str:
+    """Residual (skip-connection) block diagram.
+
+    *num_layers* controls how many weight layers are shown inside the block
+    (typically 2 or 3 for BasicBlock / Bottleneck).
+
+    Example::
+
+        residual_block(num_layers=2)   # BasicBlock
+        residual_block(num_layers=3)   # Bottleneck
+    """
+    parts: list[str] = []
+
+    box_w, box_h = 200, 40
+    gap = 20
+    margin_x = 120
+    total_h_inner = num_layers * (box_h + gap) + gap
+
+    x = margin_x
+    y_start = 80
+
+    # Input
+    parts.append(rounded_box(x, y_start - 50, box_w, 36, "Input", color=BLUE))
+    parts.append(arrow(x + box_w / 2, y_start - 14, x + box_w / 2, y_start))
+
+    layer_labels = []
+    if num_layers == 2:
+        layer_labels = ["Conv 3×3 + BN + ReLU", "Conv 3×3 + BN"]
+    elif num_layers == 3:
+        layer_labels = ["Conv 1×1 + BN + ReLU", "Conv 3×3 + BN + ReLU", "Conv 1×1 + BN"]
+    else:
+        layer_labels = [f"Conv Layer {i+1}" for i in range(num_layers)]
+
+    # dashed block container
+    parts.append(dashed_box(
+        x - 20, y_start - 10,
+        box_w + 40, total_h_inner + 20,
+        "Residual Block"
+    ))
+
+    # layer boxes
+    ys = []
+    for i, label in enumerate(layer_labels):
+        ly = y_start + i * (box_h + gap)
+        ys.append(ly)
+        parts.append(rounded_box(x, ly, box_w, box_h, label, color=INDIGO))
+        if i < num_layers - 1:
+            parts.append(arrow(x + box_w / 2, ly + box_h,
+                               x + box_w / 2, ly + box_h + gap))
+
+    # skip connection (curved path on the right)
+    skip_x = x + box_w + 35
+    y_top = y_start - 14
+    y_bot = ys[-1] + box_h + 20
+    parts.append(
+        f'<path d="M {x + box_w} {y_start + box_h // 2} '
+        f'L {skip_x} {y_start + box_h // 2} '
+        f'L {skip_x} {y_bot - 10} '
+        f'L {x + box_w} {y_bot - 10}" '
+        f'fill="none" stroke="{AMBER}" stroke-width="2" stroke-dasharray="5 3" />'
+    )
+    parts.append(
+        f'<text x="{skip_x + 10}" y="{(y_start + y_bot) // 2}" '
+        f'fill="{AMBER}" font-family="Inter,system-ui,sans-serif" '
+        f'font-size="11" dominant-baseline="central">skip</text>'
+    )
+
+    # Add & ReLU
+    y_add = ys[-1] + box_h + gap
+    parts.append(arrow(x + box_w / 2, ys[-1] + box_h, x + box_w / 2, y_add))
+    parts.append(rounded_box(x, y_add, box_w, 36, "Add & ReLU", color=GREEN))
+    parts.append(arrow(x + box_w / 2, y_add + 36, x + box_w / 2, y_add + 56))
+    parts.append(rounded_box(x, y_add + 56, box_w, 36, "Output", color=GREEN))
+
+    total_w = x * 2 + box_w + 80
+    total_h = y_add + 56 + 36 + 30
+    return svg_wrapper("\n".join(parts), width=total_w, height=total_h)
+
+
+def multi_head_attention_detail(num_heads: int = 4, d_k: int = 64,
+                                d_v: int = 64) -> str:
+    """Detailed multi-head attention showing Q/K/V projections per head.
+
+    Example::
+
+        multi_head_attention_detail(num_heads=4, d_k=64, d_v=64)
+    """
+    parts: list[str] = []
+
+    head_w = 90
+    head_gap = 12
+    heads_total = num_heads * (head_w + head_gap) - head_gap
+    margin_x = max(40, (600 - heads_total) // 2)
+    total_w = heads_total + margin_x * 2
+
+    # title
+    parts.append(
+        f'<text x="{total_w / 2}" y="28" text-anchor="middle" fill="{TEXT}" '
+        f'font-family="Inter,system-ui,sans-serif" font-size="15" font-weight="700">'
+        f'Multi-Head Attention ({num_heads} heads, d_k={d_k})</text>'
+    )
+
+    # Q, K, V inputs
+    input_y = 50
+    inp_w = 80
+    inp_gap = 30
+    inp_x_base = total_w / 2 - (inp_w * 3 + inp_gap * 2) / 2
+    for j, (label, color) in enumerate([("Q", BLUE), ("K", GREEN), ("V", AMBER)]):
+        ix = inp_x_base + j * (inp_w + inp_gap)
+        parts.append(rounded_box(int(ix), input_y, inp_w, 32, label, color=color))
+
+    # Q/K/V to heads
+    head_y = 120
+    for i in range(num_heads):
+        hx = margin_x + i * (head_w + head_gap)
+        # Head box
+        parts.append(rounded_box(hx, head_y, head_w, 70,
+                                 f"Head {i+1}\\nQ·K/√{d_k}\\n→V", color=INDIGO))
+        # Arrow from input area
+        parts.append(arrow(int(total_w / 2), input_y + 32,
+                           hx + head_w // 2, head_y))
+
+    # Concat + linear
+    concat_y = head_y + 70 + 30
+    parts.append(arrow(total_w // 2, head_y + 70, total_w // 2, concat_y))
+    parts.append(rounded_box(int(total_w / 2 - 120), concat_y, 240, 36,
+                             f"Concat + Linear (→{num_heads * d_v})", color=SLATE))
+    parts.append(arrow(total_w // 2, concat_y + 36, total_w // 2, concat_y + 66))
+    parts.append(rounded_box(int(total_w / 2 - 80), concat_y + 66, 160, 36,
+                             "Output", color=GREEN))
+
+    total_h = concat_y + 66 + 36 + 30
+    return svg_wrapper("\n".join(parts), width=total_w, height=total_h)
+
+
+def gan_architecture(gen_layers: list[str], disc_layers: list[str]) -> str:
+    """GAN architecture showing Generator vs Discriminator.
+
+    Example::
+
+        gan_architecture(
+            ["Noise z", "Dense 256", "Reshape", "Conv 4×4", "Output Image"],
+            ["Input Image", "Conv 4×4", "Flatten", "Dense 1", "Real/Fake"],
+        )
+    """
+    col_w = 200
+    gap = 100
+    margin = 40
+    title_h = 50
+    total_w = col_w * 2 + gap + margin * 2
+
+    parts: list[str] = []
+
+    # section labels
+    lx = margin + col_w / 2
+    rx = margin + col_w + gap + col_w / 2
+    for label, color, cx in [("Generator", INDIGO, lx), ("Discriminator", RED, rx)]:
+        parts.append(
+            f'<text x="{cx}" y="30" text-anchor="middle" fill="{color}" '
+            f'font-family="Inter,system-ui,sans-serif" font-size="14" '
+            f'font-weight="700">{label}</text>'
+        )
+
+    # generator column
+    parts.append(dashed_box(margin - 10, title_h - 10,
+                            col_w + 20, len(gen_layers) * 48 + 20, ""))
+    for i, step in enumerate(gen_layers):
+        y = title_h + i * 48
+        parts.append(rounded_box(margin, y, col_w, 36, step, color=INDIGO))
+        if i < len(gen_layers) - 1:
+            parts.append(arrow(margin + col_w / 2, y + 36,
+                               margin + col_w / 2, y + 48))
+
+    # discriminator column
+    rx_start = margin + col_w + gap
+    parts.append(dashed_box(rx_start - 10, title_h - 10,
+                            col_w + 20, len(disc_layers) * 48 + 20, ""))
+    for i, step in enumerate(disc_layers):
+        y = title_h + i * 48
+        parts.append(rounded_box(rx_start, y, col_w, 36, step, color=RED))
+        if i < len(disc_layers) - 1:
+            parts.append(arrow(rx_start + col_w / 2, y + 36,
+                               rx_start + col_w / 2, y + 48))
+
+    # fake image arrow between gen output and disc input
+    gen_out_y = title_h + (len(gen_layers) - 1) * 48 + 18
+    disc_in_y = title_h + 18
+    arrow_x_mid = margin + col_w + gap / 2
+    parts.append(
+        f'<path d="M {margin + col_w} {gen_out_y} '
+        f'L {arrow_x_mid} {gen_out_y} '
+        f'L {arrow_x_mid} {disc_in_y} '
+        f'L {rx_start} {disc_in_y}" '
+        f'fill="none" stroke="{AMBER}" stroke-width="1.5" '
+        f'marker-end="url(#arrowhead)" />'
+    )
+    parts.append(
+        f'<text x="{arrow_x_mid + 6}" y="{(gen_out_y + disc_in_y) // 2}" '
+        f'fill="{AMBER}" font-family="Inter,system-ui,sans-serif" '
+        f'font-size="11" dominant-baseline="central">fake\\nimage</text>'
+    )
+
+    h = max(len(gen_layers), len(disc_layers)) * 48 + title_h + 40
+    return svg_wrapper("\n".join(parts), width=total_w, height=h)
+
+
 def attention_visualization(query_labels: list[str], key_labels: list[str],
                             weights_matrix: Optional[list[list[float]]] = None) -> str:
     """Attention weight heatmap rendered as SVG rects.

@@ -24,6 +24,11 @@ from paper_demo_agent.graphics.architecture_templates import (
     pipeline_flow,
     comparison_diagram,
     attention_visualization,
+    cnn_architecture,
+    rnn_cell,
+    residual_block,
+    multi_head_attention_detail,
+    gan_architecture,
 )
 
 # ── Chart templates ───────────────────────────────────────────────────
@@ -33,6 +38,9 @@ from paper_demo_agent.graphics.chart_templates import (
     radar_chart_js,
     d3_grouped_bar,
     results_card_html,
+    line_chart_js,
+    heatmap_d3,
+    metric_dashboard_html,
     CHART_JS_CDN,
     D3_CDN,
 )
@@ -52,6 +60,8 @@ from paper_demo_agent.graphics.mermaid_patterns import (
     mermaid_architecture,
     mermaid_class_diagram,
     mermaid_sequence,
+    mermaid_training_loop,
+    mermaid_comparison,
 )
 
 # ── Dark theme ────────────────────────────────────────────────────────
@@ -66,15 +76,19 @@ __all__ = [
     # architecture templates
     "encoder_decoder", "transformer_block", "pipeline_flow",
     "comparison_diagram", "attention_visualization",
+    "cnn_architecture", "rnn_cell", "residual_block",
+    "multi_head_attention_detail", "gan_architecture",
     # chart templates
     "bar_chart_js", "comparison_table_html", "radar_chart_js",
-    "d3_grouped_bar", "results_card_html", "CHART_JS_CDN", "D3_CDN",
+    "d3_grouped_bar", "results_card_html",
+    "line_chart_js", "heatmap_d3", "metric_dashboard_html",
+    "CHART_JS_CDN", "D3_CDN",
     # tikz templates
     "tikz_flow_diagram", "tikz_block_diagram", "tikz_encoder_decoder",
     "tikz_comparison_table", "TIKZ_COLOR_DEFS",
     # mermaid patterns
     "mermaid_pipeline", "mermaid_architecture", "mermaid_class_diagram",
-    "mermaid_sequence",
+    "mermaid_sequence", "mermaid_training_loop", "mermaid_comparison",
     # reference constant
     "GRAPHICS_REFERENCE",
     # dark theme
@@ -160,6 +174,29 @@ COLOR SCHEME (dark theme):
   attention_visualization(query_labels, key_labels, weights_matrix=None)
       → attention weight heatmap as SVG
 
+  cnn_architecture(layers_config)
+      → CNN with conv/pool/fc layers (featuremap stacked boxes for conv/pool)
+      layers_config: [{"type":"conv","label":"Conv 3×3","size":60}, ...]
+      types: "input", "conv", "pool", "fc", "output"
+      Ex: cnn_architecture([{"type":"input","label":"224×224"},{"type":"conv","label":"64ch"},{"type":"pool","label":"MaxPool"},{"type":"fc","label":"FC 1024"},{"type":"output","label":"Softmax"}])
+
+  rnn_cell(cell_type='lstm')
+      → LSTM or GRU cell diagram with gate annotations
+      cell_type: "lstm" | "gru"
+      Ex: rnn_cell("lstm")
+
+  residual_block(num_layers=2)
+      → Skip connection diagram (BasicBlock=2, Bottleneck=3)
+      Ex: residual_block(num_layers=2)
+
+  multi_head_attention_detail(num_heads=4, d_k=64, d_v=64)
+      → Detailed MHA with Q/K/V projections per head + concat + linear
+      Ex: multi_head_attention_detail(num_heads=8, d_k=64, d_v=64)
+
+  gan_architecture(gen_layers, disc_layers)
+      → Generator vs Discriminator side-by-side with fake image arrow
+      Ex: gan_architecture(["Noise z","Dense 256","Conv 4×4","Image"],["Image","Conv 4×4","Dense 1","Real/Fake"])
+
 ─── Chart Templates (paper_demo_agent.graphics.chart_templates) ───
     Returns JS/HTML code strings for embedding in HTML demos.
 
@@ -180,6 +217,22 @@ COLOR SCHEME (dark theme):
 
   results_card_html(metric, value, delta, delta_label='vs SOTA')
       → metric card with big number + delta badge
+
+  line_chart_js(data_series, labels, title, y_label='Value')
+      → Chart.js multi-line chart for training curves / metrics over time
+      data_series: {"Train Loss": [2.3,1.8,...], "Val Loss": [2.5,2.0,...]}
+      Ex: line_chart_js({"Train":[2.3,1.5,0.9],"Val":[2.6,1.8,1.2]}, labels=["1","2","3"], title="Loss")
+
+  heatmap_d3(matrix, row_labels, col_labels, title, color_scheme='Blues')
+      → D3.js heatmap for attention/confusion/similarity matrices
+      matrix: 2D list of floats (auto-normalised)
+      color_scheme: "Blues", "Purples", "YlOrRd", "Greens", etc.
+      Ex: heatmap_d3([[0.9,0.1],[0.2,0.8]], ["A","B"], ["X","Y"], "Attention")
+
+  metric_dashboard_html(metrics_dict)
+      → Grid of metric cards with values and delta badges
+      metrics_dict: {"NDCG@10": {"value":"0.421","delta":"+3.2%","subtitle":"TREC DL"}, ...}
+      Ex: metric_dashboard_html({"NDCG@10":{"value":"0.421","delta":"+3.2%"},"MAP":{"value":"0.318","delta":"+1.8%"}})
 
 ─── TikZ Templates (paper_demo_agent.graphics.tikz_templates) ───
     Returns LaTeX/TikZ code for Beamer slides.
@@ -218,6 +271,18 @@ COLOR SCHEME (dark theme):
   mermaid_sequence(actors, messages)
       → sequence diagram
       messages: [("Client", "Server", "POST /predict"), ...]
+
+  mermaid_training_loop(steps=None)
+      → Training pipeline flowchart (data→forward→loss→backward→update)
+      Defaults to standard 6-stage loop; pass custom steps to override.
+      Appends loop-back arrow automatically if last step ends with "?"
+      Ex: mermaid_training_loop()
+      Ex: mermaid_training_loop(["Load Batch","Forward","Loss","Backward","SGD Step","Converged?"])
+
+  mermaid_comparison(method_a_steps, method_b_steps, labels=('Baseline','Proposed'))
+      → Side-by-side method comparison as parallel subgraphs
+      Baseline styled muted, proposed styled accent indigo
+      Ex: mermaid_comparison(["BM25","Re-rank"],["Dense","Cross-Encoder"],labels=("BM25+CE","Ours"))
 
 ─── Usage via render_svg tool ───
 

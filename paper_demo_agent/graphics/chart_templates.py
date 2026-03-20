@@ -223,6 +223,216 @@ def d3_grouped_bar(data: list[dict], group_labels: list[str],
 </script>"""
 
 
+def line_chart_js(data_series: dict[str, list[float]], labels: list[str],
+                  title: str, y_label: str = "Value") -> str:
+    """Chart.js multi-line chart for training curves, metrics over epochs, etc.
+
+    *data_series* maps series name → list of y-values (same length as *labels*).
+    *labels* are the x-axis tick labels (e.g. epoch numbers or step names).
+
+    Example::
+
+        line_chart_js(
+            {"Train Loss": [2.3, 1.8, 1.4, 1.1, 0.9],
+             "Val Loss":   [2.5, 2.0, 1.6, 1.3, 1.1]},
+            labels=["1", "2", "3", "4", "5"],
+            title="Training Curves",
+            y_label="Loss",
+        )
+    """
+    import json
+    datasets: list[str] = []
+    for i, (name, values) in enumerate(data_series.items()):
+        c = _COLORS[i % len(_COLORS)]
+        datasets.append(
+            f"    {{ label: {json.dumps(name)}, data: {json.dumps(values)}, "
+            f"borderColor: '{c}', backgroundColor: '{c}22', "
+            f"pointBackgroundColor: '{c}', pointRadius: 4, "
+            f"tension: 0.3, fill: false }}"
+        )
+    ds_str = ",\n".join(datasets)
+
+    return f"""<canvas id="lineChart_{title.replace(' ','_')}" width="640" height="380"></canvas>
+<script src="{CHART_JS_CDN}"></script>
+<script>
+new Chart(document.getElementById('lineChart_{title.replace(' ','_')}'), {{
+  type: 'line',
+  data: {{
+    labels: {json.dumps(labels)},
+    datasets: [
+{ds_str}
+    ]
+  }},
+  options: {{
+    responsive: true,
+    interaction: {{ mode: 'index', intersect: false }},
+    plugins: {{
+      title: {{ display: true, text: {json.dumps(title)}, color: '#fafafa', font: {{ size: 16 }} }},
+      legend: {{ labels: {{ color: '#94a3b8' }} }}
+    }},
+    scales: {{
+      x: {{ ticks: {{ color: '#94a3b8' }}, grid: {{ color: '#27272a' }} }},
+      y: {{
+        ticks: {{ color: '#94a3b8' }},
+        grid: {{ color: '#27272a' }},
+        title: {{ display: true, text: {json.dumps(y_label)}, color: '#94a3b8' }}
+      }}
+    }}
+  }}
+}});
+</script>"""
+
+
+def heatmap_d3(matrix: list[list[float]], row_labels: list[str],
+               col_labels: list[str], title: str,
+               color_scheme: str = "Blues") -> str:
+    """D3.js heatmap for attention matrices, confusion matrices, similarity grids, etc.
+
+    *matrix* is a 2D list [rows][cols] of float values (0–1 or raw, auto-normalised).
+    *color_scheme* is a D3 sequential scheme name: "Blues", "Purples", "YlOrRd", etc.
+
+    Example::
+
+        heatmap_d3(
+            [[0.9, 0.1, 0.0], [0.2, 0.7, 0.1], [0.05, 0.15, 0.8]],
+            row_labels=["cat", "dog", "bird"],
+            col_labels=["cat", "dog", "bird"],
+            title="Confusion Matrix",
+        )
+    """
+    import json
+    flat_vals = [v for row in matrix for v in row]
+    max_val = max(flat_vals) if flat_vals else 1.0
+    norm_matrix = [[v / max_val for v in row] for row in matrix]
+
+    data_json = json.dumps(norm_matrix)
+    rows_json = json.dumps(row_labels)
+    cols_json = json.dumps(col_labels)
+    orig_json = json.dumps(matrix)
+
+    return f"""<div id="heatmap_{title.replace(' ','_')}" style="max-width:600px"></div>
+<script src="{D3_CDN}"></script>
+<script>
+(function() {{
+  const matrix = {data_json};
+  const orig = {orig_json};
+  const rows = {rows_json};
+  const cols = {cols_json};
+  const cell = Math.min(44, Math.floor(480 / Math.max(rows.length, cols.length)));
+
+  const margin = {{top: 50, right: 20, bottom: 20, left: 80}};
+  const width  = cols.length * cell + margin.left + margin.right;
+  const height = rows.length * cell + margin.top  + margin.bottom;
+
+  const svg = d3.select('#heatmap_{title.replace(' ','_')}').append('svg')
+    .attr('width', width).attr('height', height);
+
+  const g = svg.append('g').attr('transform', `translate(${{margin.left}},${{margin.top}})`);
+
+  svg.append('text').attr('x', width / 2).attr('y', 26)
+    .attr('text-anchor', 'middle').attr('fill', '#fafafa')
+    .attr('font-size', '15px').attr('font-weight', '700').text({json.dumps(title)});
+
+  const color = d3.scaleSequential(d3.interpolate{color_scheme}).domain([0, 1]);
+
+  // cells
+  for (let r = 0; r < rows.length; r++) {{
+    for (let c = 0; c < cols.length; c++) {{
+      g.append('rect')
+        .attr('x', c * cell).attr('y', r * cell)
+        .attr('width', cell - 2).attr('height', cell - 2)
+        .attr('rx', 3).attr('fill', color(matrix[r][c]));
+      const val = orig[r][c];
+      const fmt = Number.isInteger(val) ? val : val.toFixed(2);
+      g.append('text')
+        .attr('x', c * cell + cell / 2 - 1).attr('y', r * cell + cell / 2 - 1)
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+        .attr('fill', matrix[r][c] > 0.5 ? '#09090b' : '#fafafa')
+        .attr('font-size', Math.max(9, cell * 0.25) + 'px').text(fmt);
+    }}
+  }}
+
+  // row labels
+  rows.forEach((label, r) => {{
+    g.append('text').attr('x', -6).attr('y', r * cell + cell / 2)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
+      .attr('fill', '#94a3b8').attr('font-size', '12px').text(label);
+  }});
+
+  // col labels
+  cols.forEach((label, c) => {{
+    g.append('text').attr('x', c * cell + cell / 2).attr('y', -8)
+      .attr('text-anchor', 'middle').attr('fill', '#94a3b8')
+      .attr('font-size', '12px').text(label);
+  }});
+}})();
+</script>"""
+
+
+def metric_dashboard_html(metrics_dict: dict[str, dict]) -> str:
+    """Grid of metric result cards.
+
+    *metrics_dict* maps metric name → dict with keys:
+      - ``value``: display string (e.g. "91.3%")
+      - ``delta``: change string (e.g. "+2.1%") — optional
+      - ``delta_label``: comparison label (default "vs SOTA") — optional
+      - ``subtitle``: small grey description — optional
+
+    Example::
+
+        metric_dashboard_html({
+            "NDCG@10":   {"value": "0.421", "delta": "+3.2%", "subtitle": "TREC DL 2020"},
+            "MAP":       {"value": "0.318", "delta": "+1.8%"},
+            "Recall@100":{"value": "0.892", "delta": "+0.5%"},
+        })
+    """
+    cards: list[str] = []
+    for metric, info in metrics_dict.items():
+        value = info.get("value", "—")
+        delta = info.get("delta", "")
+        delta_label = info.get("delta_label", "vs SOTA")
+        subtitle = info.get("subtitle", "")
+
+        badge_html = ""
+        if delta:
+            positive = delta.startswith("+")
+            badge_bg = "#22c55e20" if positive else "#ef444420"
+            badge_color = "#22c55e" if positive else "#ef4444"
+            arrow_char = "&#9650;" if positive else "&#9660;"
+            badge_html = (
+                f'<div style="display:inline-flex;align-items:center;gap:4px;'
+                f'background:{badge_bg};color:{badge_color};padding:3px 8px;'
+                f'border-radius:5px;font-size:12px;font-weight:600;margin-top:6px;">'
+                f'{arrow_char} {delta} '
+                f'<span style="color:#94a3b8;font-weight:400">{delta_label}</span></div>'
+            )
+
+        subtitle_html = (
+            f'<div style="color:#64748b;font-size:11px;margin-top:4px">{subtitle}</div>'
+            if subtitle else ""
+        )
+
+        cards.append(
+            f'<div style="background:#18181b;border:1px solid #27272a;border-radius:12px;'
+            f'padding:20px 24px;font-family:Inter,system-ui,sans-serif;">'
+            f'<div style="color:#94a3b8;font-size:12px;text-transform:uppercase;'
+            f'letter-spacing:0.05em;">{metric}</div>'
+            f'<div style="color:#fafafa;font-size:32px;font-weight:700;margin:6px 0">'
+            f'{value}</div>'
+            f'{badge_html}{subtitle_html}'
+            f'</div>'
+        )
+
+    grid_html = "\n".join(
+        f'  <div style="grid-column:span 1">{card}</div>' for card in cards
+    )
+    cols = min(len(metrics_dict), 4)
+    return (
+        f'<div style="display:grid;grid-template-columns:repeat({cols},1fr);'
+        f'gap:16px;margin:24px 0">\n{grid_html}\n</div>'
+    )
+
+
 def results_card_html(metric: str, value: str, delta: str,
                       delta_label: str = "vs SOTA") -> str:
     """Single metric display card with a delta badge.

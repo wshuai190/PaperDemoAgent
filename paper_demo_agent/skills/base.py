@@ -1035,6 +1035,52 @@ Step 4 ── REQUIREMENTS + DONE
           Write placeholder code; skip requirements.txt; leave TODO items unfilled.
           Use subprocess to run scripts — always use execute_python directly.
 
+━━ GRAPHICS TOOLKIT (use instead of writing SVG from scratch) ━━
+
+  You have access to pre-built graphics components via:
+    from paper_demo_agent.graphics import *
+
+  Or call them directly via the render_svg tool:
+    render_svg(expr="pipeline_flow(['Input','Model','Output'], title='Inference')")
+
+  ARCHITECTURE DIAGRAMS (SVG, returns complete <svg> string):
+    encoder_decoder(enc_layers, dec_layers)       Transformer encoder-decoder
+    transformer_block(num_heads, d_model, d_ff)   Single transformer block with residuals
+    cnn_architecture(layers_config)               CNN with conv/pool/fc layers (featuremap style)
+    rnn_cell(cell_type='lstm')                    LSTM or GRU cell with gates
+    residual_block(num_layers=2)                  ResNet skip-connection block (2=BasicBlock, 3=Bottleneck)
+    multi_head_attention_detail(num_heads, d_k, d_v) Detailed MHA with Q/K/V projections
+    gan_architecture(gen_layers, disc_layers)     Generator vs Discriminator with fake-image arrow
+    pipeline_flow(steps, title='')                Left-to-right pipeline (any # of steps)
+    comparison_diagram(method_a, method_b, ...)   Side-by-side comparison
+    attention_visualization(ql, kl, weights=None) Attention weight heatmap (SVG)
+
+  CHART TEMPLATES (returns HTML/JS code to embed in HTML files):
+    bar_chart_js(data, labels, title, highlight_idx=0)           Chart.js bar chart
+    line_chart_js(data_series, labels, title, y_label='Value')   Chart.js multi-line (training curves)
+    radar_chart_js(metrics, scores_dict, title)                  Chart.js radar / spider chart
+    d3_grouped_bar(data, group_labels, series_labels, title)     D3.js grouped bars
+    heatmap_d3(matrix, row_labels, col_labels, title)            D3.js heatmap (attention / confusion)
+    metric_dashboard_html(metrics_dict)                          Grid of metric cards with deltas
+    comparison_table_html(headers, rows, highlight_row=0)        Styled results table
+    results_card_html(metric, value, delta, delta_label='vs SOTA') Single metric card
+
+  MERMAID PATTERNS (returns Mermaid v11 string for <pre class="mermaid">):
+    mermaid_pipeline(steps)                       LR flowchart pipeline
+    mermaid_training_loop(steps=None)             Standard training loop with loop-back arrow
+    mermaid_comparison(a_steps, b_steps, labels)  Side-by-side method comparison subgraphs
+    mermaid_architecture(components, connections) TD architecture with subgraphs
+    mermaid_sequence(actors, messages)            Sequence diagram
+
+  TIKZ TEMPLATES (for LaTeX/Beamer):
+    tikz_flow_diagram(steps, title='')
+    tikz_block_diagram(blocks, connections)
+    tikz_encoder_decoder(enc_layers, dec_layers)
+    tikz_comparison_table(headers, rows, highlight_row=0)
+
+  RULE: When you need an architecture diagram or chart, USE THESE FIRST.
+        Do NOT write raw SVG path data from scratch — the toolkit produces better output faster.
+
 ━━ ERROR RECOVERY PATTERNS ━━
 
   write_file FAILS (content too large):

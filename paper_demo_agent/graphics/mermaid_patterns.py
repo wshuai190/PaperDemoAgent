@@ -111,6 +111,96 @@ def mermaid_class_diagram(classes: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def mermaid_training_loop(steps: list[str] | None = None) -> str:
+    """Standard training pipeline flowchart (data → forward → loss → backward → update).
+
+    *steps* overrides the default pipeline stages.
+
+    Example::
+
+        mermaid_training_loop()
+        mermaid_training_loop(["Load Batch", "Augment", "Forward", "Loss", "Backward", "Step"])
+    """
+    if steps is None:
+        steps = ["Load Batch", "Forward Pass", "Compute Loss",
+                 "Backward Pass", "Update Weights", "Next Epoch?"]
+
+    node_colors = ["#3b82f6", "#6366f1", "#ef4444", "#f59e0b", "#22c55e", "#64748b"]
+    nodes: list[str] = []
+    for i, step in enumerate(steps):
+        safe = step.replace('"', "'")
+        shape = f'S{i}{{"{safe}"}}' if step.endswith("?") else f'S{i}["{safe}"]'
+        nodes.append(f"    {shape}")
+
+    arrows: list[str] = []
+    for i in range(len(steps) - 1):
+        arrows.append(f"    S{i} --> S{i + 1}")
+    # loop back from last to first if it ends with "?"
+    if steps[-1].endswith("?"):
+        arrows.append(f'    S{len(steps)-1} -->|"Yes"| S0')
+        arrows.append(f'    S{len(steps)-1} -->|"No"| DONE["End Training"]')
+
+    styles: list[str] = []
+    for i in range(len(steps)):
+        c = node_colors[i % len(node_colors)]
+        styles.append(f"    style S{i} fill:{c},stroke:{c},color:#fafafa")
+
+    return (
+        f"{_INIT}\n"
+        "flowchart LR\n"
+        + "\n".join(nodes) + "\n"
+        + "\n".join(arrows) + "\n"
+        + "\n".join(styles)
+    )
+
+
+def mermaid_comparison(method_a_steps: list[str], method_b_steps: list[str],
+                       labels: tuple[str, str] = ("Baseline", "Proposed")) -> str:
+    """Side-by-side method comparison as parallel subgraphs.
+
+    Example::
+
+        mermaid_comparison(
+            ["Dense Retrieval", "BM25 Re-rank", "Top-K Output"],
+            ["Sparse Embed", "Cross-Encoder", "Re-rank Top-K"],
+            labels=("BM25+CE", "Ours"),
+        )
+    """
+    lines = [f"{_INIT}", "flowchart TD"]
+
+    label_a, label_b = labels
+
+    # subgraph A (baseline)
+    lines.append(f'    subgraph "{label_a}"')
+    for i, step in enumerate(method_a_steps):
+        safe = step.replace('"', "'")
+        lines.append(f'        A{i}["{safe}"]')
+    lines.append("    end")
+
+    # subgraph B (proposed)
+    lines.append(f'    subgraph "{label_b}"')
+    for i, step in enumerate(method_b_steps):
+        safe = step.replace('"', "'")
+        lines.append(f'        B{i}["{safe}"]')
+    lines.append("    end")
+
+    # arrows within A
+    for i in range(len(method_a_steps) - 1):
+        lines.append(f"    A{i} --> A{i+1}")
+
+    # arrows within B
+    for i in range(len(method_b_steps) - 1):
+        lines.append(f"    B{i} --> B{i+1}")
+
+    # style baseline as muted, proposed as accent
+    for i in range(len(method_a_steps)):
+        lines.append(f"    style A{i} fill:#475569,stroke:#64748b,color:#fafafa")
+    for i in range(len(method_b_steps)):
+        lines.append(f"    style B{i} fill:#6366f1,stroke:#818cf8,color:#fafafa")
+
+    return "\n".join(lines)
+
+
 def mermaid_sequence(actors: list[str],
                      messages: list[tuple[str, str, str]]) -> str:
     """Sequence diagram for algorithms / protocols.

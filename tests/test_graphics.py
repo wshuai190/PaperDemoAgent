@@ -135,6 +135,74 @@ class TestArchitectureTemplates:
         assert "0.90" in svg
         assert "0.70" in svg
 
+    def test_cnn_architecture_basic(self):
+        from paper_demo_agent.graphics.architecture_templates import cnn_architecture
+        svg = cnn_architecture([
+            {"type": "input",  "label": "Input 224x224"},
+            {"type": "conv",   "label": "Conv 3x3"},
+            {"type": "pool",   "label": "MaxPool 2x2"},
+            {"type": "fc",     "label": "FC 1024"},
+            {"type": "output", "label": "Softmax"},
+        ])
+        assert "<svg" in svg
+        assert "CNN Architecture" in svg
+        assert "Conv 3x3" in svg
+        assert "MaxPool 2x2" in svg
+
+    def test_cnn_architecture_empty(self):
+        from paper_demo_agent.graphics.architecture_templates import cnn_architecture
+        svg = cnn_architecture([])
+        assert "<svg" in svg
+
+    def test_rnn_cell_lstm(self):
+        from paper_demo_agent.graphics.architecture_templates import rnn_cell
+        svg = rnn_cell(cell_type="lstm")
+        assert "<svg" in svg
+        assert "LSTM Cell" in svg
+        assert "Forget" in svg
+        assert "c_" in svg  # cell state label
+
+    def test_rnn_cell_gru(self):
+        from paper_demo_agent.graphics.architecture_templates import rnn_cell
+        svg = rnn_cell(cell_type="gru")
+        assert "<svg" in svg
+        assert "GRU Cell" in svg
+        assert "Update" in svg
+
+    def test_residual_block_basic(self):
+        from paper_demo_agent.graphics.architecture_templates import residual_block
+        svg = residual_block(num_layers=2)
+        assert "<svg" in svg
+        assert "Residual Block" in svg
+        assert "Add & ReLU" in svg
+        assert "skip" in svg
+
+    def test_residual_block_bottleneck(self):
+        from paper_demo_agent.graphics.architecture_templates import residual_block
+        svg = residual_block(num_layers=3)
+        assert "<svg" in svg
+        assert "Conv 1x1" in svg or "Conv 3x3" in svg or "Conv" in svg
+
+    def test_multi_head_attention_detail(self):
+        from paper_demo_agent.graphics.architecture_templates import multi_head_attention_detail
+        svg = multi_head_attention_detail(num_heads=4, d_k=64, d_v=64)
+        assert "<svg" in svg
+        assert "Multi-Head Attention" in svg
+        assert "Head 1" in svg
+        assert "Head 4" in svg
+        assert "Concat" in svg
+
+    def test_gan_architecture(self):
+        from paper_demo_agent.graphics.architecture_templates import gan_architecture
+        svg = gan_architecture(
+            ["Noise z", "Dense 256", "Output Image"],
+            ["Input Image", "Conv 4x4", "Real/Fake"],
+        )
+        assert "<svg" in svg
+        assert "Generator" in svg
+        assert "Discriminator" in svg
+        assert "fake" in svg
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Chart Templates
@@ -197,6 +265,67 @@ class TestChartTemplates:
         from paper_demo_agent.graphics.chart_templates import CHART_JS_CDN, D3_CDN
         assert "chart.js@4" in CHART_JS_CDN
         assert "d3.v7" in D3_CDN
+
+    def test_line_chart_js(self):
+        from paper_demo_agent.graphics.chart_templates import line_chart_js, CHART_JS_CDN
+        html = line_chart_js(
+            {"Train Loss": [2.3, 1.8, 1.4], "Val Loss": [2.5, 2.0, 1.7]},
+            labels=["1", "2", "3"],
+            title="Training Curves",
+            y_label="Loss",
+        )
+        assert CHART_JS_CDN in html
+        assert "lineChart_" in html
+        assert "Train Loss" in html
+        assert "Val Loss" in html
+        assert "type: 'line'" in html
+
+    def test_line_chart_js_single_series(self):
+        from paper_demo_agent.graphics.chart_templates import line_chart_js
+        html = line_chart_js({"Acc": [0.6, 0.7, 0.8]}, ["1", "2", "3"], "Accuracy")
+        assert "<canvas" in html
+        assert "Accuracy" in html
+
+    def test_heatmap_d3(self):
+        from paper_demo_agent.graphics.chart_templates import heatmap_d3, D3_CDN
+        html = heatmap_d3(
+            [[0.9, 0.1], [0.2, 0.8]],
+            row_labels=["cat", "dog"],
+            col_labels=["cat", "dog"],
+            title="Confusion Matrix",
+        )
+        assert D3_CDN in html
+        assert "heatmap_" in html
+        assert "Confusion Matrix" in html
+        assert "cat" in html
+        assert "dog" in html
+
+    def test_heatmap_d3_normalisation(self):
+        # Values > 1 should be auto-normalised without errors
+        from paper_demo_agent.graphics.chart_templates import heatmap_d3
+        html = heatmap_d3(
+            [[100, 20], [30, 90]],
+            row_labels=["A", "B"],
+            col_labels=["X", "Y"],
+            title="Big Values",
+        )
+        assert "heatmap_" in html
+
+    def test_metric_dashboard_html(self):
+        from paper_demo_agent.graphics.chart_templates import metric_dashboard_html
+        html = metric_dashboard_html({
+            "NDCG@10": {"value": "0.421", "delta": "+3.2%"},
+            "MAP":     {"value": "0.318", "delta": "-0.5%", "delta_label": "vs BM25"},
+            "Recall":  {"value": "0.892", "subtitle": "Recall@100"},
+        })
+        assert "NDCG@10" in html
+        assert "0.421" in html
+        assert "+3.2%" in html
+        assert "#22c55e" in html   # positive delta green
+        assert "#ef4444" in html   # negative delta red
+        assert "vs BM25" in html
+        assert "Recall@100" in html
+        assert "grid-template-columns" in html
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -288,6 +417,49 @@ class TestMermaidPatterns:
         assert "participant A" in md
         assert "A->>+B: hello" in md
 
+    def test_mermaid_training_loop_default(self):
+        from paper_demo_agent.graphics.mermaid_patterns import mermaid_training_loop
+        md = mermaid_training_loop()
+        assert "%%{init:" in md
+        assert "flowchart LR" in md
+        assert "Forward Pass" in md
+        assert "Backward Pass" in md
+        assert "S0 --> S1" in md
+
+    def test_mermaid_training_loop_custom(self):
+        from paper_demo_agent.graphics.mermaid_patterns import mermaid_training_loop
+        md = mermaid_training_loop(["Load", "Forward", "Loss", "Step"])
+        assert "Load" in md
+        assert "Step" in md
+        assert "S0 --> S1" in md
+
+    def test_mermaid_training_loop_with_question(self):
+        from paper_demo_agent.graphics.mermaid_patterns import mermaid_training_loop
+        md = mermaid_training_loop(["Batch", "Forward", "Converged?"])
+        assert "Yes" in md
+        assert "No" in md
+        assert "End Training" in md
+
+    def test_mermaid_comparison(self):
+        from paper_demo_agent.graphics.mermaid_patterns import mermaid_comparison
+        md = mermaid_comparison(
+            ["BM25", "Re-rank"],
+            ["Dense", "Cross-Encoder"],
+            labels=("Old", "New"),
+        )
+        assert "%%{init:" in md
+        assert "flowchart TD" in md
+        assert '"Old"' in md
+        assert '"New"' in md
+        assert "A0" in md and "B0" in md
+        assert "#6366f1" in md   # proposed accent colour
+
+    def test_mermaid_comparison_default_labels(self):
+        from paper_demo_agent.graphics.mermaid_patterns import mermaid_comparison
+        md = mermaid_comparison(["A"], ["B"])
+        assert "Baseline" in md
+        assert "Proposed" in md
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # __init__ exports and GRAPHICS_REFERENCE
@@ -303,6 +475,17 @@ class TestGraphicsInit:
         assert "bar_chart_js" in GRAPHICS_REFERENCE
         assert "tikz_flow_diagram" in GRAPHICS_REFERENCE
         assert "mermaid_pipeline" in GRAPHICS_REFERENCE
+        # new additions
+        assert "cnn_architecture" in GRAPHICS_REFERENCE
+        assert "rnn_cell" in GRAPHICS_REFERENCE
+        assert "residual_block" in GRAPHICS_REFERENCE
+        assert "multi_head_attention_detail" in GRAPHICS_REFERENCE
+        assert "gan_architecture" in GRAPHICS_REFERENCE
+        assert "line_chart_js" in GRAPHICS_REFERENCE
+        assert "heatmap_d3" in GRAPHICS_REFERENCE
+        assert "metric_dashboard_html" in GRAPHICS_REFERENCE
+        assert "mermaid_training_loop" in GRAPHICS_REFERENCE
+        assert "mermaid_comparison" in GRAPHICS_REFERENCE
 
     def test_all_exports_importable(self):
         from paper_demo_agent.graphics import __all__
