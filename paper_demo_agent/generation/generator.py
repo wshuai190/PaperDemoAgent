@@ -1177,6 +1177,10 @@ def _run_loop(
         else:
             messages.append(_anthropic_assistant_message(response))
 
+        # NOTE: nudge messages are injected AFTER tool results below,
+        # because Anthropic API requires tool_results immediately after tool_use.
+        _pending_nudge: Optional[str] = None
+
         # Check if main file exists — nudge model EVERY iteration until it writes the main file
         if is_build and iteration >= 1:
             from paper_demo_agent.skills.base import FORM_SPECS as _FS
@@ -1190,7 +1194,7 @@ def _run_loop(
             if _has_support and not _has_main:
                 urgency = "CRITICAL" if iteration >= 3 else "URGENT"
                 iters_left = max_iter - iteration - 1
-                nudge_main = (
+                _pending_nudge = (
                     f"{urgency}: You have written supporting files ({', '.join(f for f in _all_files if f != 'paper.pdf')}) "
                     f"but NOT the main file '{_main_file}'. You have {iters_left} iterations left. "
                     f"Write '{_main_file}' NOW using write_file — this is your TOP PRIORITY. "
@@ -1198,7 +1202,6 @@ def _run_loop(
                     f"Without '{_main_file}', the demo is COMPLETELY BROKEN and all your work is wasted."
                 )
                 on_emit(f"  ↳ {urgency}: supporting files exist but no {_main_file} ({iters_left} iters left)\n")
-                messages.append({"role": "user", "content": nudge_main})
 
         # Track whether this iteration is search-only (build phase only)
         tool_names = {tc.name for tc in response.tool_calls}
@@ -1248,6 +1251,12 @@ def _run_loop(
                     messages.append(_anthropic_tool_result_message(tc, result))
                 if tc.name == "write_file" and "Missing required argument" in result:
                     write_failed_this_iter = True
+
+        # Inject the pending main-file nudge AFTER all tool results
+        # (must come after tool_results to satisfy Anthropic API ordering)
+        if _pending_nudge is not None:
+            messages.append({"role": "user", "content": _pending_nudge})
+            _pending_nudge = None
 
         # Track consecutive write_file failures (typically from max_tokens truncation)
         if write_failed_this_iter:
