@@ -7,6 +7,7 @@ Post    — VALIDATE  (up to 8 iters):   form-compliance check + auto-correction
 """
 
 import base64
+import concurrent.futures
 import json
 import os
 import re
@@ -890,6 +891,135 @@ def _run_research_phase(
     return "\n\n".join(findings)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Form-specific iteration budgets (optimization #5)
+# ─────────────────────────────────────────────────────────────────────────────
+
+FORM_BUDGETS = {
+    "page_readme":      {"build": 6,  "polish": 2},
+    "diagram_graphviz":  {"build": 6,  "polish": 2},
+    "flowchart":        {"build": 8,  "polish": 2},
+    "presentation":     {"build": 15, "polish": 3},
+    "website":          {"build": 12, "polish": 3},
+    "page_blog":        {"build": 14, "polish": 3},
+    "slides":           {"build": 14, "polish": 3},
+    "latex":            {"build": 14, "polish": 3},
+    "app":              {"build": 12, "polish": 3},
+    "app_streamlit":    {"build": 12, "polish": 3},
+}
+
+# Forms that typically produce large files and benefit from skeleton-first writing
+_LARGE_FILE_FORMS = frozenset([
+    "presentation", "website", "page_blog", "latex", "slides",
+])
+
+_SKELETON_FIRST_MESSAGE = (
+    "IMPORTANT: Write files using a skeleton-first approach:\n"
+    "1. First write the main file with the COMPLETE structure but placeholder content "
+    "(comments like <!-- TODO: results section -->)\n"
+    "2. Then use additional write_file calls to overwrite with full content section by section\n"
+    "3. This prevents max_tokens truncation. NEVER try to write a 500+ line file in a single call."
+)
+
+# Tools that are safe to run in parallel (no side effects on shared state)
+_PARALLEL_SAFE_TOOLS = frozenset([
+    "web_search", "search_huggingface", "read_file", "list_files",
+    "write_file", "download_file", "validate_output",
+])
+# Tools with side effects that must run sequentially
+_SEQUENTIAL_TOOLS = frozenset(["execute_python", "install_package"])
+
+
+def _can_parallelize(tool_calls: list) -> bool:
+    """Check if a set of tool calls can safely be executed in parallel."""
+    names = {tc.name for tc in tool_calls}
+    # Any sequential tool in the batch → run all sequentially
+    if names & _SEQUENTIAL_TOOLS:
+        return False
+    # All tools must be parallel-safe
+    if not names.issubset(_PARALLEL_SAFE_TOOLS):
+        return False
+    # write_file calls must target different files
+    write_paths = [tc.arguments.get("path") for tc in tool_calls if tc.name == "write_file"]
+    if len(write_paths) != len(set(write_paths)):
+        return False
+    return True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Context compaction (optimization #2)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _compact_messages(messages: list, keep_first: int = 1, keep_last: int = 6) -> list:
+    """Compact old messages to reduce context size while preserving working memory.
+
+    - Keeps messages[0:keep_first] unchanged (initial prompt)
+    - Keeps messages[-keep_last:] unchanged (recent context)
+    - For middle messages: truncates tool results to first 100 chars,
+      and strips tool_use input details from assistant messages.
+    """
+    if len(messages) <= keep_first + keep_last:
+        return messages
+
+    head = messages[:keep_first]
+    tail = messages[-keep_last:]
+    middle = messages[keep_first:-keep_last]
+
+    compacted = []
+    for msg in middle:
+        role = msg.get("role", "")
+        content = msg.get("content")
+
+        if role == "tool":
+            # OpenAI format tool result — truncate content
+            truncated = dict(msg)
+            if isinstance(content, str) and len(content) > 100:
+                truncated["content"] = content[:100] + "...[truncated]"
+            compacted.append(truncated)
+
+        elif role == "user" and isinstance(content, list):
+            # Anthropic format tool_result blocks — truncate content
+            new_blocks = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_result":
+                    block = dict(block)
+                    c = block.get("content", "")
+                    if isinstance(c, str) and len(c) > 100:
+                        block["content"] = c[:100] + "...[truncated]"
+                new_blocks.append(block)
+            compacted.append({**msg, "content": new_blocks})
+
+        elif role == "assistant" and isinstance(content, list):
+            # Anthropic format — keep text blocks, strip tool_use input details
+            new_blocks = []
+            for block in content:
+                if isinstance(block, dict) and block.get("type") == "tool_use":
+                    # Keep id/name for message continuity, but clear bulky input
+                    new_blocks.append({
+                        "type": "tool_use",
+                        "id": block.get("id", ""),
+                        "name": block.get("name", ""),
+                        "input": {},
+                    })
+                else:
+                    new_blocks.append(block)
+            compacted.append({**msg, "content": new_blocks})
+
+        elif role == "assistant" and "tool_calls" in msg:
+            # OpenAI format — strip function arguments from tool_calls
+            stripped = dict(msg)
+            stripped["tool_calls"] = [
+                {**tc, "function": {**tc["function"], "arguments": "{}"}}
+                for tc in msg["tool_calls"]
+            ]
+            compacted.append(stripped)
+
+        else:
+            compacted.append(msg)
+
+    return head + compacted + tail
+
+
 _SEARCH_TOOL_NAMES = {"web_search", "search_huggingface"}
 _MAX_SEARCH_ONLY_ITERS = 2  # after this many consecutive search-only iters, force writing
 
@@ -908,8 +1038,19 @@ def _run_loop(
     is_build = phase_label.startswith("build")
     search_only_iters = 0  # consecutive iters with only search calls, no write_file
     consecutive_write_failures = 0  # consecutive iters where write_file failed
+    skeleton_injected = False  # track whether skeleton-first hint was injected
+
+    # Determine the demo form from the phase label for skeleton-first logic
+    build_form = phase_label.replace("build-", "").replace("build", "").strip() or ""
 
     for iteration in range(max_iter):
+        # Context compaction: after every 4 iterations, compact old messages (optimization #2)
+        if len(messages) > 20 and iteration > 0 and iteration % 4 == 0:
+            before_len = len(messages)
+            messages = _compact_messages(messages, keep_first=1, keep_last=6)
+            if len(messages) < before_len:
+                on_emit(f"  ↳ Compacted context: {before_len} → {len(messages)} messages\n")
+
         on_emit(f"  [{phase_label}iter {iteration + 1}] calling model...\n")
         response = _chat_with_retry(
             provider, messages, system, TOOLS, 16384, on_emit
@@ -949,6 +1090,16 @@ def _run_loop(
         else:
             messages.append(_anthropic_assistant_message(response))
 
+        # Skeleton-first injection (optimization #3): after first iteration in build phase
+        # where no main file has been written yet, inject skeleton-first hint for large forms
+        if (is_build and not skeleton_injected and iteration >= 1
+                and build_form in _LARGE_FILE_FORMS):
+            has_files = any(True for f in Path(output_dir).rglob("*") if f.is_file())
+            if not has_files:
+                on_emit("  ↳ Injecting skeleton-first writing strategy hint\n")
+                messages.append({"role": "user", "content": _SKELETON_FIRST_MESSAGE})
+                skeleton_injected = True
+
         # Track whether this iteration is search-only (build phase only)
         tool_names = {tc.name for tc in response.tool_calls}
         has_write = "write_file" in tool_names
@@ -959,17 +1110,44 @@ def _run_loop(
         else:
             search_only_iters = 0
 
+        # Parallel tool execution (optimization #4): run parallelizable tools concurrently
         write_failed_this_iter = False
-        for tc in response.tool_calls:
-            on_emit(f"\n  ◆ {tc.name}({', '.join(list(tc.arguments.keys())[:3])})\n")
-            result = dispatch_tool(tc.name, tc.arguments, output_dir)
-            on_emit(f"    → {result[:200]}\n")
-            if use_openai_fmt:
-                messages.append(_openai_tool_result_message(tc, result))
-            else:
-                messages.append(_anthropic_tool_result_message(tc, result))
-            if tc.name == "write_file" and "Missing required argument" in result:
-                write_failed_this_iter = True
+        if len(response.tool_calls) > 1 and _can_parallelize(response.tool_calls):
+            on_emit(f"  ↳ Executing {len(response.tool_calls)} tools in parallel\n")
+            results = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(response.tool_calls)) as executor:
+                future_to_tc = {
+                    executor.submit(dispatch_tool, tc.name, tc.arguments, output_dir): tc
+                    for tc in response.tool_calls
+                }
+                for future in concurrent.futures.as_completed(future_to_tc):
+                    tc = future_to_tc[future]
+                    try:
+                        results[tc.id] = future.result()
+                    except Exception as e:
+                        results[tc.id] = f"Tool error ({tc.name}): {e}"
+            # Append results in original order to preserve message sequence
+            for tc in response.tool_calls:
+                result = results[tc.id]
+                on_emit(f"\n  ◆ {tc.name}({', '.join(list(tc.arguments.keys())[:3])})\n")
+                on_emit(f"    → {result[:200]}\n")
+                if use_openai_fmt:
+                    messages.append(_openai_tool_result_message(tc, result))
+                else:
+                    messages.append(_anthropic_tool_result_message(tc, result))
+                if tc.name == "write_file" and "Missing required argument" in result:
+                    write_failed_this_iter = True
+        else:
+            for tc in response.tool_calls:
+                on_emit(f"\n  ◆ {tc.name}({', '.join(list(tc.arguments.keys())[:3])})\n")
+                result = dispatch_tool(tc.name, tc.arguments, output_dir)
+                on_emit(f"    → {result[:200]}\n")
+                if use_openai_fmt:
+                    messages.append(_openai_tool_result_message(tc, result))
+                else:
+                    messages.append(_anthropic_tool_result_message(tc, result))
+                if tc.name == "write_file" and "Missing required argument" in result:
+                    write_failed_this_iter = True
 
         # Track consecutive write_file failures (typically from max_tokens truncation)
         if write_failed_this_iter:
@@ -1094,7 +1272,13 @@ def generate(
             initial += pdf_survey
 
         messages: list[dict] = [{"role": "user", "content": initial}]
-        build_iters = max(4, max_iter - 6)  # reserve 3 for polish, ~3 for research
+
+        # Form-specific iteration budgets (optimization #5)
+        budget = FORM_BUDGETS.get(form, {"build": max(4, max_iter - 6), "polish": 3})
+        build_iters = min(budget["build"], max_iter)
+        polish_iters = min(budget["polish"], max(1, max_iter - build_iters))
+        _emit(f"  Budget: build={build_iters}, polish={polish_iters} (form={form})\n")
+
         messages = _run_loop(
             provider=provider,
             messages=messages,
@@ -1103,7 +1287,7 @@ def generate(
             use_openai_fmt=use_oai,
             on_emit=_emit,
             max_iter=build_iters,
-            phase_label="build-",
+            phase_label=f"build-{form}-" if form else "build-",
         )
 
         # ── Phase 3: Polish ───────────────────────────────────────────────
@@ -1131,7 +1315,7 @@ def generate(
                 output_dir=output_dir,
                 use_openai_fmt=use_oai,
                 on_emit=_emit,
-                max_iter=3,
+                max_iter=polish_iters,
                 phase_label="polish-",
             )
 

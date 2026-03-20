@@ -2,9 +2,11 @@
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -203,6 +205,26 @@ TOOLS: List[Dict] = [
                 },
             },
             "required": ["url", "filename"],
+        },
+    },
+    {
+        "name": "validate_output",
+        "description": (
+            "Validate a generated file for common issues. "
+            "For HTML: checks unclosed tags, empty src/href, missing doctype, broken relative paths. "
+            "For Python: checks syntax via ast.parse. "
+            "For JS: checks matching braces/brackets/parens. "
+            "Returns a list of issues found, or 'No issues found'."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative file path to validate (e.g. 'index.html', 'app.py')",
+                },
+            },
+            "required": ["path"],
         },
     },
 ]
@@ -465,6 +487,175 @@ def tool_web_search(query: str) -> str:
     return f"No results for: {query!r}"
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Output validation helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _HTMLValidator(HTMLParser):
+    """Lightweight HTML validator that tracks unclosed tags and bad attributes."""
+
+    VOID_ELEMENTS = frozenset([
+        "area", "base", "br", "col", "embed", "hr", "img", "input",
+        "link", "meta", "param", "source", "track", "wbr",
+    ])
+
+    def __init__(self):
+        super().__init__()
+        self.issues: List[str] = []
+        self.tag_stack: List[str] = []
+
+    def handle_starttag(self, tag: str, attrs):
+        tag = tag.lower()
+        if tag not in self.VOID_ELEMENTS:
+            self.tag_stack.append(tag)
+        attrs_dict = dict(attrs)
+        # Check empty src/href
+        for attr in ("src", "href"):
+            if attr in attrs_dict and not attrs_dict[attr].strip():
+                self.issues.append(f"Empty {attr} attribute on <{tag}> (line ~{self.getpos()[0]})")
+        # Script tag with no src (content checked in handle_endtag via _last_script_has_src)
+        if tag == "script" and "src" not in attrs_dict:
+            self._script_no_src = True
+        else:
+            self._script_no_src = False
+
+    def handle_endtag(self, tag: str):
+        tag = tag.lower()
+        if tag in self.VOID_ELEMENTS:
+            return
+        if self.tag_stack and self.tag_stack[-1] == tag:
+            self.tag_stack.pop()
+        elif tag in self.tag_stack:
+            # Mismatched nesting — pop up to the matching tag
+            unclosed = []
+            while self.tag_stack and self.tag_stack[-1] != tag:
+                unclosed.append(self.tag_stack.pop())
+            if self.tag_stack:
+                self.tag_stack.pop()
+            for t in unclosed:
+                self.issues.append(f"Unclosed <{t}> tag before </{tag}>")
+
+    def close(self):
+        super().close()
+        for tag in reversed(self.tag_stack):
+            self.issues.append(f"Unclosed <{tag}> tag at end of file")
+
+
+def _validate_html(content: str, output_dir: str, file_path: str) -> List[str]:
+    """Validate HTML file for common issues."""
+    issues: List[str] = []
+
+    # Check for doctype
+    if not re.match(r'\s*<!DOCTYPE\s', content, re.IGNORECASE):
+        issues.append("Missing <!DOCTYPE html> declaration")
+
+    # Parse for unclosed tags and empty attributes
+    validator = _HTMLValidator()
+    try:
+        validator.feed(content)
+        validator.close()
+        issues.extend(validator.issues)
+    except Exception:
+        issues.append("HTML parsing error — file may be malformed")
+
+    # Check for broken relative paths (src/href that reference local files)
+    base = Path(output_dir)
+    file_dir = (base / file_path).parent
+    for match in re.finditer(r'(?:src|href)\s*=\s*["\']([^"\']+)["\']', content):
+        ref = match.group(1)
+        # Skip external URLs, data URIs, anchors, template vars
+        if ref.startswith(("http://", "https://", "//", "data:", "#", "{", "mailto:")):
+            continue
+        ref_path = (file_dir / ref).resolve()
+        if not ref_path.exists():
+            issues.append(f"Broken reference: {ref} (file not found)")
+
+    return issues
+
+
+def _validate_python(content: str) -> List[str]:
+    """Validate Python file syntax using ast.parse."""
+    import ast
+    try:
+        ast.parse(content)
+        return []
+    except SyntaxError as e:
+        return [f"Python syntax error at line {e.lineno}: {e.msg}"]
+
+
+def _validate_js(content: str) -> List[str]:
+    """Basic JS validation — check matching braces/brackets/parens."""
+    issues: List[str] = []
+    stack: List[str] = []
+    pairs = {")": "(", "]": "[", "}": "{"}
+    in_string = None  # track string delimiters
+    prev_char = ""
+    line_num = 1
+
+    for ch in content:
+        if ch == "\n":
+            line_num += 1
+        # Track strings (skip escaped quotes)
+        if in_string:
+            if ch == in_string and prev_char != "\\":
+                in_string = None
+            prev_char = ch
+            continue
+        if ch in ("'", '"', '`'):
+            in_string = ch
+            prev_char = ch
+            continue
+        # Skip single-line comments
+        if ch == "/" and prev_char == "/":
+            # consume until newline (simplified)
+            prev_char = ch
+            continue
+
+        if ch in ("(", "[", "{"):
+            stack.append((ch, line_num))
+        elif ch in pairs:
+            if stack and stack[-1][0] == pairs[ch]:
+                stack.pop()
+            elif stack:
+                issues.append(f"Mismatched '{ch}' at line {line_num} (expected closing for '{stack[-1][0]}')")
+            else:
+                issues.append(f"Unexpected closing '{ch}' at line {line_num}")
+        prev_char = ch
+
+    for bracket, ln in stack:
+        issues.append(f"Unclosed '{bracket}' opened at line {ln}")
+
+    return issues
+
+
+def tool_validate_output(output_dir: str, path: str) -> str:
+    """Validate a generated file and return a list of issues."""
+    target = _safe_path(output_dir, path)
+    if not target.exists():
+        return f"Error: file not found: {path}"
+
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return f"Error: {path} is a binary file and cannot be validated as text."
+
+    suffix = target.suffix.lower()
+    issues: List[str] = []
+
+    if suffix in (".html", ".htm"):
+        issues = _validate_html(content, output_dir, path)
+    elif suffix == ".py":
+        issues = _validate_python(content)
+    elif suffix in (".js", ".mjs"):
+        issues = _validate_js(content)
+    else:
+        return f"Validation not supported for {suffix} files. Supported: .html, .py, .js"
+
+    if not issues:
+        return "No issues found"
+    return "Issues found:\n" + "\n".join(f"  • {issue}" for issue in issues[:20])
+
+
 def dispatch_tool(tool_name: str, arguments: Dict[str, Any], output_dir: str) -> str:
     """Dispatch a tool call by name and return the result as a string."""
     try:
@@ -498,6 +689,8 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], output_dir: str) ->
             return tool_download_file(output_dir, arguments["url"], arguments["filename"])
         elif tool_name == "web_search":
             return tool_web_search(arguments["query"])
+        elif tool_name == "validate_output":
+            return tool_validate_output(output_dir, arguments["path"])
         else:
             return f"Unknown tool: {tool_name!r}"
     except KeyError as e:
