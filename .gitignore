@@ -65,3 +65,4 @@ demos/
 *.tar.gz
 *.whl
 /spaces
+GEMINI.md
