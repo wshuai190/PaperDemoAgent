@@ -61,6 +61,11 @@ Decision guidelines:
 - Anything else → GeneralQASkill, app/gradio, user_demo
 
 Return ONLY valid JSON, no markdown fences.
+
+EXAMPLES of good classifications:
+- "Attention Is All You Need" (new architecture) → paper_type: model, skill: TheoreticalExplainerSkill, form: presentation/revealjs
+- "BERT" (pretrained model) → paper_type: model, skill: ModelInferenceSkill, form: app/gradio
+- "SQuAD" (benchmark dataset) → paper_type: dataset, skill: DataExplorerSkill, form: app/gradio
 """
 
 

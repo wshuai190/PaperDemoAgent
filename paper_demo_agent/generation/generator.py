@@ -1271,6 +1271,17 @@ def generate(
         if pdf_survey:
             initial += pdf_survey
 
+        # Inject file-writing order hint for forms that produce multi-file HTML/CSS/JS output
+        if form in ("presentation", "website", "page_blog", "latex", "slides"):
+            initial += (
+                "\n\nFILE WRITING ORDER: You MUST write files in this order:\n"
+                "1. styles.css (all CSS)\n"
+                "2. script.js or visualizations.js (all JavaScript)\n"
+                "3. Main file (index.html / demo.html) — reference the CSS and JS files with "
+                "<link> and <script> tags\n"
+                "This prevents truncation. Do NOT combine everything into one file."
+            )
+
         messages: list[dict] = [{"role": "user", "content": initial}]
 
         # Form-specific iteration budgets (optimization #5)
