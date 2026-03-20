@@ -2,6 +2,8 @@
 
 import base64
 import json
+import time
+import uuid
 from typing import Any, Dict, Iterator, List, Optional
 
 from paper_demo_agent.providers.base import BaseLLMProvider, LLMResponse, ToolCall
@@ -35,6 +37,13 @@ class GeminiProvider(BaseLLMProvider):
         "gemini-3-pro-preview", "gemini-3-flash-preview",
         "gemini-3.1-pro-preview",
     }
+
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        super().__init__(api_key=api_key, model=model)
+        self._session_id = str(uuid.uuid4())
+        self._resolved_code_assist_project: Optional[str] = None
+        self._resolved_code_assist_project_loaded = False
+        self._last_code_assist_request_at = 0.0
 
     def list_models_live(self) -> Optional[List[str]]:
         """Fetch curated Gemini models from the API (no experimental/dated variants)."""
@@ -103,23 +112,23 @@ class GeminiProvider(BaseLLMProvider):
             pass  # If internals change, fall through — configure() may still work
 
         if self.api_key and self._is_gemini_cli_token:
-            # Gemini CLI OAuth token — use Bearer auth via google.oauth2.credentials
-            data = json.loads(self.api_key)
-            access_token = data["token"]
+            # Gemini CLI OAuth token — handled via direct REST in _chat_rest(),
+            # but _get_genai() is still called by stream_chat/list_models_live.
+            # Configure with a dummy setup so the SDK doesn't error on import.
+            import os
+            env_backup = os.environ.pop("GOOGLE_API_KEY", None)
             try:
-                from google.oauth2.credentials import Credentials
-                credentials = Credentials(token=access_token)
-                # Clear env var to prevent conflict with credentials
-                import os
-                env_backup = os.environ.pop("GOOGLE_API_KEY", None)
+                data = json.loads(self.api_key)
+                access_token = data["token"]
                 try:
+                    from google.oauth2.credentials import Credentials
+                    credentials = Credentials(token=access_token)
                     genai.configure(credentials=credentials)
-                finally:
-                    if env_backup is not None:
-                        os.environ["GOOGLE_API_KEY"] = env_backup
-            except ImportError:
-                # Fallback: use the raw access token as an API key
-                genai.configure(api_key=access_token)
+                except ImportError:
+                    genai.configure(api_key=access_token)
+            finally:
+                if env_backup is not None:
+                    os.environ["GOOGLE_API_KEY"] = env_backup
         elif self.api_key:
             # Standard API key (e.g. from Google AI Studio)
             # Temporarily clear GOOGLE_API_KEY env var to prevent genai from
@@ -148,6 +157,244 @@ class GeminiProvider(BaseLLMProvider):
                     f"ADC error: {exc}"
                 ) from exc
         return genai
+
+    def _convert_tools_json(self, tools: List[Dict]) -> List[Dict]:
+        """Convert tools to plain JSON format for REST calls."""
+        TYPE_MAP = {"string": "STRING", "integer": "INTEGER", "number": "NUMBER",
+                    "boolean": "BOOLEAN", "array": "ARRAY", "object": "OBJECT"}
+        declarations = []
+        for t in tools:
+            params = t.get("parameters", {"type": "object", "properties": {}})
+            properties = {
+                k: {"type": TYPE_MAP.get(v.get("type", "string").lower(), "STRING"),
+                    "description": v.get("description", "")}
+                for k, v in params.get("properties", {}).items()
+            }
+            declarations.append({
+                "name": t["name"],
+                "description": t.get("description", ""),
+                "parameters": {
+                    "type": "OBJECT",
+                    "properties": properties,
+                    "required": params.get("required", []),
+                },
+            })
+        return [{"functionDeclarations": declarations}]
+
+    def _parse_rest_response(self, data: Dict) -> LLMResponse:
+        """Parse raw JSON response from Gemini REST API."""
+        content_text = ""
+        tool_calls = []
+        for candidate in data.get("candidates", []):
+            for part in candidate.get("content", {}).get("parts", []):
+                if "text" in part:
+                    content_text += part["text"]
+                elif "functionCall" in part:
+                    fc = part["functionCall"]
+                    tool_calls.append(ToolCall(
+                        id=f"call_{fc['name']}_{len(tool_calls)}",
+                        name=fc["name"],
+                        arguments=fc.get("args", {}),
+                    ))
+        stop_reason = "tool_use" if tool_calls else "end_turn"
+        return LLMResponse(content=content_text, tool_calls=tool_calls,
+                           stop_reason=stop_reason, raw=data)
+
+    @staticmethod
+    def _code_assist_metadata(project_id: Optional[str] = None) -> Dict[str, Any]:
+        metadata: Dict[str, Any] = {
+            "ideType": "IDE_UNSPECIFIED",
+            "platform": "PLATFORM_UNSPECIFIED",
+            "pluginType": "GEMINI",
+        }
+        if project_id:
+            metadata["duetProject"] = project_id
+        return metadata
+
+    @staticmethod
+    def _default_onboard_tier(load_res: Dict[str, Any]) -> Dict[str, Any]:
+        for tier in load_res.get("allowedTiers", []) or []:
+            if isinstance(tier, dict) and tier.get("isDefault"):
+                return tier
+        return {
+            "id": "legacy-tier",
+            "name": "",
+            "description": "",
+            "userDefinedCloudaicompanionProject": True,
+        }
+
+    @staticmethod
+    def _code_assist_error_message(load_res: Dict[str, Any]) -> str:
+        ineligible = load_res.get("ineligibleTiers", []) or []
+        reasons = [tier.get("reasonMessage") for tier in ineligible if isinstance(tier, dict) and tier.get("reasonMessage")]
+        if reasons:
+            return ", ".join(reasons)
+        return (
+            "This Gemini CLI account requires a valid Code Assist project, but no managed "
+            "project was returned. Set GOOGLE_CLOUD_PROJECT for workspace auth, or run "
+            "`gemini` again to refresh personal OAuth setup."
+        )
+
+    @staticmethod
+    def _extract_operation_project(operation_res: Dict[str, Any]) -> Optional[str]:
+        return (
+            ((operation_res.get("response") or {}).get("cloudaicompanionProject") or {}).get("id")
+        )
+
+    def _code_assist_post(self, client, headers: Dict[str, str], method: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+        self._throttle_code_assist_request()
+        url = f"https://cloudcode-pa.googleapis.com/v1internal:{method}"
+        resp = client.post(url, json=payload, headers=headers)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Gemini OAuth API error: {resp.status_code} - {resp.text}")
+        return resp.json()
+
+    def _code_assist_get_operation(self, client, headers: Dict[str, str], operation_name: str) -> Dict[str, Any]:
+        self._throttle_code_assist_request()
+        url = f"https://cloudcode-pa.googleapis.com/v1internal/{operation_name}"
+        resp = client.get(url, headers=headers)
+        if resp.status_code != 200:
+            raise RuntimeError(f"Gemini OAuth API error: {resp.status_code} - {resp.text}")
+        return resp.json()
+
+    def _throttle_code_assist_request(self) -> None:
+        """Pace Gemini CLI requests to reduce free-tier 429s."""
+        min_interval_s = 1.2
+        now = time.monotonic()
+        elapsed = now - self._last_code_assist_request_at
+        if elapsed < min_interval_s:
+            time.sleep(min_interval_s - elapsed)
+        self._last_code_assist_request_at = time.monotonic()
+
+    def _resolve_code_assist_project(
+        self,
+        client,
+        headers: Dict[str, str],
+        configured_project: Optional[str],
+    ) -> Optional[str]:
+        if configured_project:
+            return configured_project
+        if self._resolved_code_assist_project_loaded:
+            return self._resolved_code_assist_project
+
+        load_res = self._code_assist_post(
+            client,
+            headers,
+            "loadCodeAssist",
+            {
+                "cloudaicompanionProject": configured_project,
+                "metadata": self._code_assist_metadata(configured_project),
+            },
+        )
+
+        current_project = load_res.get("cloudaicompanionProject")
+        if current_project:
+            self._resolved_code_assist_project = current_project
+            self._resolved_code_assist_project_loaded = True
+            return current_project
+
+        if load_res.get("currentTier"):
+            self._resolved_code_assist_project_loaded = True
+            self._resolved_code_assist_project = None
+            raise RuntimeError(self._code_assist_error_message(load_res))
+
+        tier = self._default_onboard_tier(load_res)
+        tier_id = tier.get("id")
+        onboard_payload: Dict[str, Any] = {
+            "tierId": tier_id,
+            "cloudaicompanionProject": configured_project if tier_id != "free-tier" else None,
+            "metadata": self._code_assist_metadata(configured_project if tier_id != "free-tier" else None),
+        }
+
+        lro_res = self._code_assist_post(client, headers, "onboardUser", onboard_payload)
+        while not lro_res.get("done") and lro_res.get("name"):
+            time.sleep(5)
+            lro_res = self._code_assist_get_operation(client, headers, lro_res["name"])
+
+        project_id = self._extract_operation_project(lro_res) or configured_project
+        self._resolved_code_assist_project = project_id
+        self._resolved_code_assist_project_loaded = True
+        if not project_id:
+            raise RuntimeError(self._code_assist_error_message(load_res))
+        return project_id
+
+    @staticmethod
+    def _should_retry_without_project(resp) -> bool:
+        """Retry without project when Gemini CLI personal auth hits invalid consumer errors."""
+        if resp.status_code != 403:
+            return False
+        try:
+            body = resp.json()
+        except Exception:
+            return False
+
+        error = body.get("error", {})
+        message = (error.get("message") or "").lower()
+        details = error.get("details", []) or []
+        for detail in details:
+            if not isinstance(detail, dict):
+                continue
+            if detail.get("reason") == "CONSUMER_INVALID":
+                return True
+        return "permission denied on resource project" in message
+
+    def _chat_rest(
+        self,
+        messages: List[Dict],
+        system: str = "",
+        tools: Optional[List[Dict]] = None,
+        max_tokens: int = 8192,
+    ) -> LLMResponse:
+        """Direct REST call for Gemini CLI OAuth tokens.
+
+        The Gemini CLI uses cloudcode-pa.googleapis.com (Google Code Assist),
+        not generativelanguage.googleapis.com. The cloud-platform scope token
+        only works with this endpoint, using a wrapped request body.
+        """
+        import httpx
+
+        data = json.loads(self.api_key)
+        access_token = data["token"]
+        project_id = data.get("projectId")
+        url = "https://cloudcode-pa.googleapis.com/v1internal:generateContent"
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        }
+
+        inner: Dict[str, Any] = {
+            "contents": self._messages_to_gemini(messages),
+            "generationConfig": {"maxOutputTokens": max_tokens},
+        }
+        if system:
+            inner["systemInstruction"] = {"parts": [{"text": system}]}
+        if tools:
+            inner["tools"] = self._convert_tools_json(tools)
+
+        # cloudcode-pa wraps the standard GenerateContentRequest. The Gemini CLI
+        # includes the active project and a session_id for every request.
+        payload: Dict[str, Any] = {
+            "model": self.model,
+            "user_prompt_id": str(uuid.uuid4()),
+            "request": {
+                **inner,
+                "session_id": self._session_id,
+            },
+        }
+        with httpx.Client(timeout=120.0) as client:
+            project_id = self._resolve_code_assist_project(client, headers, project_id)
+            if project_id:
+                payload["project"] = project_id
+            resp = client.post(url, json=payload, headers=headers)
+            if project_id and self._should_retry_without_project(resp):
+                retry_payload = dict(payload)
+                retry_payload.pop("project", None)
+                resp = client.post(url, json=retry_payload, headers=headers)
+            if resp.status_code != 200:
+                raise RuntimeError(f"Gemini OAuth API error: {resp.status_code} - {resp.text}")
+            # Response may be wrapped: {"response": {...}} or direct GenerateContentResponse
+            body = resp.json()
+            return self._parse_rest_response(body.get("response", body))
 
     def _convert_tools(self, tools: List[Dict]) -> List[Any]:
         """Convert generic tool defs to Gemini FunctionDeclaration format."""
@@ -186,7 +433,7 @@ class GeminiProvider(BaseLLMProvider):
                 # Tool results
                 result.append({
                     "role": "user",
-                    "parts": [{"function_response": {
+                    "parts": [{"functionResponse": {
                         "name": msg.get("name", "tool"),
                         "response": {"result": content},
                     }}],
@@ -201,18 +448,36 @@ class GeminiProvider(BaseLLMProvider):
                     if isinstance(c, dict):
                         if c.get("type") == "text":
                             parts.append({"text": c["text"]})
+                        elif c.get("type") == "tool_use":
+                            parts.append({
+                                "functionCall": {
+                                    "name": c["name"],
+                                    "args": c.get("input", {}),
+                                }
+                            })
+                        elif c.get("type") == "tool_result":
+                            parts.append({
+                                "functionResponse": {
+                                    "name": c.get("name", "tool"),
+                                    "response": {"result": c.get("content", "")},
+                                }
+                            })
                         elif "inline_data" in c:
-                            # Pass through inline_data (e.g. PDF bytes) unchanged
-                            parts.append(c)
+                            parts.append({"inlineData": c["inline_data"]})
+                        elif "inlineData" in c:
+                            parts.append({"inlineData": c["inlineData"]})
+                        elif "function_response" in c:
+                            parts.append({"functionResponse": c["function_response"]})
+                        elif "functionResponse" in c:
+                            parts.append({"functionResponse": c["functionResponse"]})
                         elif "text" in c:
                             # Already in Gemini parts format (from chat_with_pdf)
                             parts.append(c)
-                result.append({"role": role, "parts": parts})
+                if parts:
+                    result.append({"role": role, "parts": parts})
         return result
 
     def _parse_response(self, response) -> LLMResponse:
-        import google.generativeai as genai
-
         content_text = ""
         tool_calls = []
 
@@ -243,6 +508,8 @@ class GeminiProvider(BaseLLMProvider):
         tools: Optional[List[Dict]] = None,
         max_tokens: int = 8192,
     ) -> LLMResponse:
+        if self._is_gemini_cli_token:
+            return self._chat_rest(messages, system=system, tools=tools, max_tokens=max_tokens)
         genai = self._get_genai()
 
         model_kwargs: Dict[str, Any] = {"model_name": self.model}

@@ -94,7 +94,10 @@ def create_provider(
         key, source = km.get_with_source(info["key_env"])
         if source:
             import sys
-            print(f"[paper-demo-agent] Using {info['key_env']} from {source}", file=sys.stderr)
+            if name == "gemini" and source == "gemini-cli":
+                print("[paper-demo-agent] Using Gemini CLI OAuth credentials", file=sys.stderr)
+            else:
+                print(f"[paper-demo-agent] Using {info['key_env']} from {source}", file=sys.stderr)
 
     # Gemini can authenticate via Google Application Default Credentials — no key required
     if not key and name != "gemini":

@@ -110,7 +110,6 @@ class KeyManager:
 
     def _detect_gemini_cli_file(self) -> Optional[str]:
         """Read Gemini CLI OAuth credentials from ~/.gemini/oauth_creds.json."""
-        import time
         cred_path = Path.home() / ".gemini" / "oauth_creds.json"
         if not cred_path.exists():
             return None
@@ -135,6 +134,8 @@ class KeyManager:
                             pass
 
             if access_token:
+                # ~/.gemini/projects.json is only Gemini CLI's local workspace
+                # slug registry, not a Cloud Code Assist consumer project ID.
                 return json.dumps({"token": access_token})
         except Exception:
             pass

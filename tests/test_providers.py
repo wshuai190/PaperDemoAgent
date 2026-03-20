@@ -1,10 +1,12 @@
 """Tests for provider layer."""
 
+import json
 import pytest
 from unittest.mock import MagicMock, patch
 
 from paper_demo_agent.providers.base import BaseLLMProvider, LLMResponse, ToolCall
 from paper_demo_agent.providers.factory import create_provider, list_providers, PROVIDER_DEFAULTS
+from paper_demo_agent.providers.gemini_provider import GeminiProvider
 
 
 class TestToolCall:
@@ -83,3 +85,242 @@ class TestFactory:
         provider = create_provider("minimax", api_key="fake-key", group_id="group123")
         assert provider.__class__.__name__ == "MiniMaxProvider"
         assert provider._group_id == "group123"
+
+
+class TestGeminiProvider:
+    def test_messages_to_gemini_normalizes_rest_parts(self):
+        provider = GeminiProvider(api_key=json.dumps({"token": "oauth-token", "projectId": "proj"}))
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"inline_data": {"mime_type": "application/pdf", "data": "ZmFrZQ=="}},
+                    {"type": "text", "text": "Analyze this paper"},
+                ],
+            },
+            {"role": "tool", "name": "write_file", "content": "ok"},
+        ]
+
+        converted = provider._messages_to_gemini(messages)
+
+        assert converted[0]["parts"][0] == {
+            "inlineData": {"mime_type": "application/pdf", "data": "ZmFrZQ=="}
+        }
+        assert converted[0]["parts"][1] == {"text": "Analyze this paper"}
+        assert converted[1]["parts"][0] == {
+            "functionResponse": {"name": "write_file", "response": {"result": "ok"}}
+        }
+
+    def test_messages_to_gemini_handles_anthropic_tool_history(self):
+        provider = GeminiProvider(api_key=json.dumps({"token": "oauth-token"}))
+        messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_1",
+                        "name": "web_search",
+                        "input": {"query": "attention is all you need"},
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call_1",
+                        "content": "Search results here",
+                    }
+                ],
+            },
+        ]
+
+        converted = provider._messages_to_gemini(messages)
+
+        assert converted[0] == {
+            "role": "model",
+            "parts": [{"functionCall": {"name": "web_search", "args": {"query": "attention is all you need"}}}],
+        }
+        assert converted[1] == {
+            "role": "user",
+            "parts": [{"functionResponse": {"name": "tool", "response": {"result": "Search results here"}}}],
+        }
+
+    def test_chat_rest_uses_project_and_session_id(self, monkeypatch):
+        provider = GeminiProvider(
+            api_key=json.dumps({"token": "oauth-token", "projectId": "paperdemoagent"}),
+            model="gemini-2.5-flash",
+        )
+        captured = {}
+
+        class DummyResponse:
+            status_code = 200
+            text = "ok"
+
+            @staticmethod
+            def json():
+                return {"response": {"candidates": [{"content": {"parts": [{"text": "done"}]}}]}}
+
+        class DummyClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def post(self, url, json=None, headers=None):
+                captured["url"] = url
+                captured["json"] = json
+                captured["headers"] = headers
+                return DummyResponse()
+
+        monkeypatch.setattr("httpx.Client", DummyClient)
+
+        response = provider.chat_with_pdf(
+            messages=[{"role": "user", "content": "Analyze this paper"}],
+            pdf_bytes=b"%PDF-1.4 fake",
+            system="system prompt",
+            max_tokens=256,
+        )
+
+        assert response.content == "done"
+        assert captured["url"] == "https://cloudcode-pa.googleapis.com/v1internal:generateContent"
+        assert captured["headers"]["Authorization"] == "Bearer oauth-token"
+        assert captured["json"]["project"] == "paperdemoagent"
+        assert captured["json"]["model"] == "gemini-2.5-flash"
+        assert captured["json"]["request"]["session_id"] == provider._session_id
+        assert "enabled_credit_types" not in captured["json"]
+        assert captured["json"]["request"]["systemInstruction"] == {
+            "parts": [{"text": "system prompt"}]
+        }
+        assert captured["json"]["request"]["contents"][0]["parts"][0]["inlineData"]["mime_type"] == "application/pdf"
+
+    def test_chat_rest_retries_without_invalid_project(self, monkeypatch):
+        provider = GeminiProvider(
+            api_key=json.dumps({"token": "oauth-token", "projectId": "paperdemoagent"}),
+            model="gemini-2.5-flash",
+        )
+        calls = []
+
+        class DummyResponse:
+            def __init__(self, status_code, body):
+                self.status_code = status_code
+                self._body = body
+                self.text = json.dumps(body)
+
+            def json(self):
+                return self._body
+
+        class DummyClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def post(self, url, json=None, headers=None):
+                calls.append(json)
+                if len(calls) == 1:
+                    return DummyResponse(
+                        403,
+                        {
+                            "error": {
+                                "message": "Permission denied on resource project paperdemoagent.",
+                                "details": [{"reason": "CONSUMER_INVALID"}],
+                            }
+                        },
+                    )
+                return DummyResponse(
+                    200,
+                    {"response": {"candidates": [{"content": {"parts": [{"text": "done"}]}}]}},
+                )
+
+        monkeypatch.setattr("httpx.Client", DummyClient)
+
+        response = provider.chat(
+            messages=[{"role": "user", "content": "hello"}],
+            system="system prompt",
+            max_tokens=64,
+        )
+
+        assert response.content == "done"
+        assert len(calls) == 2
+        assert calls[0]["project"] == "paperdemoagent"
+        assert "project" not in calls[1]
+
+    def test_chat_rest_loads_code_assist_project_before_generate(self, monkeypatch):
+        provider = GeminiProvider(
+            api_key=json.dumps({"token": "oauth-token"}),
+            model="gemini-2.5-flash",
+        )
+        calls = []
+
+        class DummyResponse:
+            def __init__(self, status_code, body):
+                self.status_code = status_code
+                self._body = body
+                self.text = json.dumps(body)
+
+            def json(self):
+                return self._body
+
+        class DummyClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def post(self, url, json=None, headers=None):
+                calls.append((url, json))
+                if url.endswith(":loadCodeAssist"):
+                    return DummyResponse(
+                        200,
+                        {
+                            "allowedTiers": [{"id": "free-tier", "name": "Free", "isDefault": True}],
+                        },
+                    )
+                if url.endswith(":onboardUser"):
+                    return DummyResponse(
+                        200,
+                        {
+                            "done": True,
+                            "response": {
+                                "cloudaicompanionProject": {"id": "server-project"},
+                            },
+                        },
+                    )
+                if url.endswith(":generateContent"):
+                    return DummyResponse(
+                        200,
+                        {"response": {"candidates": [{"content": {"parts": [{"text": "done"}]}}]}},
+                    )
+                raise AssertionError(f"Unexpected POST URL: {url}")
+
+            def get(self, url, headers=None):
+                raise AssertionError(f"Unexpected GET URL: {url}")
+
+        monkeypatch.setattr("httpx.Client", DummyClient)
+
+        response = provider.chat(
+            messages=[{"role": "user", "content": "hello"}],
+            system="system prompt",
+            max_tokens=64,
+        )
+
+        assert response.content == "done"
+        assert calls[0][0].endswith(":loadCodeAssist")
+        assert calls[1][0].endswith(":onboardUser")
+        assert calls[2][0].endswith(":generateContent")
+        assert calls[2][1]["project"] == "server-project"
