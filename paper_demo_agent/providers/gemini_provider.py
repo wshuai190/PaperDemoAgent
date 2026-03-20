@@ -12,16 +12,30 @@ from paper_demo_agent.providers.base import BaseLLMProvider, LLMResponse, ToolCa
 class GeminiProvider(BaseLLMProvider):
     """LLM provider for Google Gemini models."""
 
+    AUTO_GEMINI_3 = "auto-gemini-3"
+    AUTO_GEMINI_2_5 = "auto-gemini-2.5"
+    AUTO_ALIAS = "auto"
+    PRO_ALIAS = "pro"
+    FLASH_ALIAS = "flash"
+    FLASH_LITE_ALIAS = "flash-lite"
+
     MODELS = [
+        AUTO_GEMINI_3,
+        AUTO_GEMINI_2_5,
         "gemini-2.5-flash",
         "gemini-2.5-pro",
+        "gemini-2.5-flash-lite",
+        "gemini-3-pro-preview",
+        "gemini-3-flash-preview",
+        "gemini-3.1-pro-preview",
+        "gemini-3.1-flash-lite-preview",
         "gemini-2.0-flash",
         "gemini-2.0-flash-lite",
     ]
 
     @property
     def default_model(self) -> str:
-        return "gemini-2.5-flash"
+        return self.AUTO_GEMINI_2_5
 
     def list_models(self) -> List[str]:
         return self.MODELS
@@ -36,6 +50,7 @@ class GeminiProvider(BaseLLMProvider):
         "gemini-2.0-flash", "gemini-2.0-flash-lite",
         "gemini-3-pro-preview", "gemini-3-flash-preview",
         "gemini-3.1-pro-preview",
+        "gemini-3.1-flash-lite-preview",
     }
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
@@ -44,6 +59,65 @@ class GeminiProvider(BaseLLMProvider):
         self._resolved_code_assist_project: Optional[str] = None
         self._resolved_code_assist_project_loaded = False
         self._last_code_assist_request_at = 0.0
+        self._live_models_cache: Optional[List[str]] = None
+
+    @classmethod
+    def model_choice_tuples(cls, live_models: Optional[List[str]] = None) -> List[tuple[str, str]]:
+        choices = [
+            ("Auto (Gemini 3)", cls.AUTO_GEMINI_3),
+            ("Auto (Gemini 2.5)", cls.AUTO_GEMINI_2_5),
+        ]
+        concrete_models = live_models or [m for m in cls.MODELS if not cls._is_alias_value(m)]
+        for model in concrete_models:
+            if cls._is_alias_value(model):
+                continue
+            choices.append((model, model))
+        return choices
+
+    @classmethod
+    def _is_alias_value(cls, model: str) -> bool:
+        return model in {
+            cls.AUTO_GEMINI_3,
+            cls.AUTO_GEMINI_2_5,
+            cls.AUTO_ALIAS,
+            cls.PRO_ALIAS,
+            cls.FLASH_ALIAS,
+            cls.FLASH_LITE_ALIAS,
+        }
+
+    def _available_models_for_aliases(self) -> set[str]:
+        live = self._live_models_cache or []
+        if live:
+            return set(live)
+        return set(self._CURATED_MODELS) | {
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-3-pro-preview",
+            "gemini-3-flash-preview",
+            "gemini-3.1-pro-preview",
+            "gemini-3.1-flash-lite-preview",
+        }
+
+    def _resolved_model_name(self) -> str:
+        requested = self.model
+        available = self._available_models_for_aliases()
+
+        def pick(candidates: List[str]) -> str:
+            for candidate in candidates:
+                if candidate in available:
+                    return candidate
+            return candidates[-1]
+
+        if requested in (self.AUTO_GEMINI_3, self.AUTO_ALIAS, self.PRO_ALIAS):
+            return pick(["gemini-3.1-pro-preview", "gemini-3-pro-preview", "gemini-2.5-pro"])
+        if requested == self.AUTO_GEMINI_2_5:
+            return "gemini-2.5-pro"
+        if requested == self.FLASH_ALIAS:
+            return pick(["gemini-3-flash-preview", "gemini-2.5-flash"])
+        if requested == self.FLASH_LITE_ALIAS:
+            return pick(["gemini-3.1-flash-lite-preview", "gemini-2.5-flash-lite"])
+        return requested
 
     def list_models_live(self) -> Optional[List[str]]:
         """Fetch curated Gemini models from the API (no experimental/dated variants)."""
@@ -56,7 +130,8 @@ class GeminiProvider(BaseLLMProvider):
                 if "generateContent" in supported and name in self._CURATED_MODELS:
                     models.append(name)
             # Deduplicate and sort with newest first
-            return sorted(set(models), reverse=True) if models else None
+            self._live_models_cache = sorted(set(models), reverse=True) if models else None
+            return self._live_models_cache
         except Exception:
             return None
 
@@ -195,10 +270,26 @@ class GeminiProvider(BaseLLMProvider):
                         id=f"call_{fc['name']}_{len(tool_calls)}",
                         name=fc["name"],
                         arguments=fc.get("args", {}),
+                        metadata=self._extract_function_call_metadata(fc),
                     ))
         stop_reason = "tool_use" if tool_calls else "end_turn"
         return LLMResponse(content=content_text, tool_calls=tool_calls,
                            stop_reason=stop_reason, raw=data)
+
+    @staticmethod
+    def _extract_function_call_metadata(function_call: Any) -> Dict[str, Any]:
+        """Keep provider-specific function call fields needed for follow-up turns."""
+        metadata: Dict[str, Any] = {}
+        if isinstance(function_call, dict):
+            thought_signature = function_call.get("thoughtSignature") or function_call.get("thought_signature")
+        else:
+            thought_signature = (
+                getattr(function_call, "thoughtSignature", None)
+                or getattr(function_call, "thought_signature", None)
+            )
+        if thought_signature:
+            metadata["thoughtSignature"] = thought_signature
+        return metadata
 
     @staticmethod
     def _code_assist_metadata(project_id: Optional[str] = None) -> Dict[str, Any]:
@@ -374,7 +465,7 @@ class GeminiProvider(BaseLLMProvider):
         # cloudcode-pa wraps the standard GenerateContentRequest. The Gemini CLI
         # includes the active project and a session_id for every request.
         payload: Dict[str, Any] = {
-            "model": self.model,
+            "model": self._resolved_model_name(),
             "user_prompt_id": str(uuid.uuid4()),
             "request": {
                 **inner,
@@ -424,7 +515,10 @@ class GeminiProvider(BaseLLMProvider):
     def _messages_to_gemini(self, messages: List[Dict]) -> List[Dict]:
         """Convert OpenAI-style messages to Gemini format."""
         result = []
-        for msg in messages:
+        last_tool_uses: Dict[str, str] = {}
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
             role = msg["role"]
             content = msg.get("content", "")
             if role == "assistant":
@@ -438,7 +532,35 @@ class GeminiProvider(BaseLLMProvider):
                         "response": {"result": content},
                     }}],
                 })
+                i += 1
                 continue
+
+            # Anthropic-style tool results come back as one user message per tool.
+            # Gemini expects all function responses for a model tool-call turn to be
+            # grouped together in the next user turn.
+            if role == "user" and isinstance(content, list):
+                tool_result_parts = []
+                j = i
+                while j < len(messages):
+                    candidate = messages[j]
+                    if candidate.get("role") != "user" or not isinstance(candidate.get("content"), list):
+                        break
+                    blocks = candidate["content"]
+                    if not blocks or not all(isinstance(b, dict) and b.get("type") == "tool_result" for b in blocks):
+                        break
+                    for block in blocks:
+                        tool_name = last_tool_uses.get(block.get("tool_use_id", ""), block.get("name", "tool"))
+                        tool_result_parts.append({
+                            "functionResponse": {
+                                "name": tool_name,
+                                "response": {"result": block.get("content", "")},
+                            }
+                        })
+                    j += 1
+                if tool_result_parts:
+                    result.append({"role": "user", "parts": tool_result_parts})
+                    i = j
+                    continue
 
             if isinstance(content, str):
                 result.append({"role": role, "parts": [{"text": content}]})
@@ -449,11 +571,21 @@ class GeminiProvider(BaseLLMProvider):
                         if c.get("type") == "text":
                             parts.append({"text": c["text"]})
                         elif c.get("type") == "tool_use":
+                            last_tool_uses[c.get("id", "")] = c["name"]
+                            function_call = {
+                                "name": c["name"],
+                                "args": c.get("input", {}),
+                            }
+                            metadata = c.get("metadata", {})
+                            if isinstance(metadata, dict):
+                                thought_signature = (
+                                    metadata.get("thoughtSignature")
+                                    or metadata.get("thought_signature")
+                                )
+                                if thought_signature:
+                                    function_call["thoughtSignature"] = thought_signature
                             parts.append({
-                                "functionCall": {
-                                    "name": c["name"],
-                                    "args": c.get("input", {}),
-                                }
+                                "functionCall": function_call
                             })
                         elif c.get("type") == "tool_result":
                             parts.append({
@@ -475,6 +607,7 @@ class GeminiProvider(BaseLLMProvider):
                             parts.append(c)
                 if parts:
                     result.append({"role": role, "parts": parts})
+            i += 1
         return result
 
     def _parse_response(self, response) -> LLMResponse:
@@ -491,6 +624,7 @@ class GeminiProvider(BaseLLMProvider):
                     id=f"call_{fc.name}_{len(tool_calls)}",
                     name=fc.name,
                     arguments=args,
+                    metadata=self._extract_function_call_metadata(fc),
                 ))
 
         stop_reason = "tool_use" if tool_calls else "end_turn"
@@ -513,6 +647,7 @@ class GeminiProvider(BaseLLMProvider):
         genai = self._get_genai()
 
         model_kwargs: Dict[str, Any] = {"model_name": self.model}
+        model_kwargs["model_name"] = self._resolved_model_name()
         if system:
             model_kwargs["system_instruction"] = system
         if tools:
@@ -537,6 +672,7 @@ class GeminiProvider(BaseLLMProvider):
         genai = self._get_genai()
 
         model_kwargs: Dict[str, Any] = {"model_name": self.model}
+        model_kwargs["model_name"] = self._resolved_model_name()
         if system:
             model_kwargs["system_instruction"] = system
 

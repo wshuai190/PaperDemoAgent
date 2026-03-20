@@ -1059,6 +1059,12 @@ def _get_models_for_provider(provider: str) -> dict:
     default = info.get("default_model", static_models[0] if static_models else "")
 
     live = _fetch_live_models(provider)
+    if provider == "gemini":
+        from paper_demo_agent.providers.gemini_provider import GeminiProvider
+        concrete_live = live if live else [m for m in static_models if not GeminiProvider._is_alias_value(m)]
+        choices = GeminiProvider.model_choice_tuples(concrete_live)
+        return gr.update(choices=choices, value=default)
+
     if live:
         best_default = default if default in live else live[0]
         return gr.update(choices=live, value=best_default)

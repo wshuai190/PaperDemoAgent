@@ -78,12 +78,15 @@ def _anthropic_assistant_message(response: LLMResponse) -> dict:
     if response.content:
         content_blocks.append({"type": "text", "text": response.content})
     for tc in response.tool_calls:
-        content_blocks.append({
+        block = {
             "type": "tool_use",
             "id": tc.id,
             "name": tc.name,
             "input": tc.arguments,
-        })
+        }
+        if tc.metadata:
+            block["metadata"] = tc.metadata
+        content_blocks.append(block)
     if not content_blocks:
         return {"role": "assistant", "content": ""}
     return {"role": "assistant", "content": content_blocks}

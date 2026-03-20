@@ -15,6 +15,7 @@ class TestToolCall:
         assert tc.id == "call_1"
         assert tc.name == "write_file"
         assert tc.arguments["path"] == "app.py"
+        assert tc.metadata == {}
 
 
 class TestLLMResponse:
@@ -88,6 +89,14 @@ class TestFactory:
 
 
 class TestGeminiProvider:
+    def test_resolved_model_name_supports_cli_auto_aliases(self):
+        provider = GeminiProvider(api_key="fake", model="auto-gemini-2.5")
+        assert provider._resolved_model_name() == "gemini-2.5-pro"
+
+        provider = GeminiProvider(api_key="fake", model="auto-gemini-3")
+        provider._live_models_cache = ["gemini-3.1-pro-preview", "gemini-3-flash-preview"]
+        assert provider._resolved_model_name() == "gemini-3.1-pro-preview"
+
     def test_messages_to_gemini_normalizes_rest_parts(self):
         provider = GeminiProvider(api_key=json.dumps({"token": "oauth-token", "projectId": "proj"}))
         messages = [
@@ -145,7 +154,63 @@ class TestGeminiProvider:
         }
         assert converted[1] == {
             "role": "user",
-            "parts": [{"functionResponse": {"name": "tool", "response": {"result": "Search results here"}}}],
+            "parts": [{"functionResponse": {"name": "web_search", "response": {"result": "Search results here"}}}],
+        }
+
+    def test_messages_to_gemini_replays_thought_signature(self):
+        provider = GeminiProvider(api_key=json.dumps({"token": "oauth-token"}))
+        messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "call_1",
+                        "name": "web_search",
+                        "input": {"query": "chain of thought prompting"},
+                        "metadata": {"thoughtSignature": "sig-123"},
+                    }
+                ],
+            },
+        ]
+
+        converted = provider._messages_to_gemini(messages)
+
+        assert converted[0] == {
+            "role": "model",
+            "parts": [{
+                "functionCall": {
+                    "name": "web_search",
+                    "args": {"query": "chain of thought prompting"},
+                    "thoughtSignature": "sig-123",
+                }
+            }],
+        }
+
+    def test_messages_to_gemini_merges_consecutive_tool_results(self):
+        provider = GeminiProvider(api_key=json.dumps({"token": "oauth-token"}))
+        messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "call_1", "name": "web_search", "input": {"query": "a"}},
+                    {"type": "tool_use", "id": "call_2", "name": "search_huggingface", "input": {"query": "b"}},
+                ],
+            },
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "call_1", "content": "result a"}]},
+            {"role": "user", "content": [{"type": "tool_result", "tool_use_id": "call_2", "content": "result b"}]},
+        ]
+
+        converted = provider._messages_to_gemini(messages)
+
+        assert converted[0]["role"] == "model"
+        assert len(converted[0]["parts"]) == 2
+        assert converted[1] == {
+            "role": "user",
+            "parts": [
+                {"functionResponse": {"name": "web_search", "response": {"result": "result a"}}},
+                {"functionResponse": {"name": "search_huggingface", "response": {"result": "result b"}}},
+            ],
         }
 
     def test_chat_rest_uses_project_and_session_id(self, monkeypatch):
@@ -324,3 +389,24 @@ class TestGeminiProvider:
         assert calls[1][0].endswith(":onboardUser")
         assert calls[2][0].endswith(":generateContent")
         assert calls[2][1]["project"] == "server-project"
+
+    def test_parse_rest_response_preserves_thought_signature(self):
+        provider = GeminiProvider(api_key=json.dumps({"token": "oauth-token"}))
+
+        response = provider._parse_rest_response({
+            "candidates": [{
+                "content": {
+                    "parts": [{
+                        "functionCall": {
+                            "name": "web_search",
+                            "args": {"query": "chain of thought"},
+                            "thoughtSignature": "sig-123",
+                        }
+                    }]
+                }
+            }]
+        })
+
+        assert response.stop_reason == "tool_use"
+        assert len(response.tool_calls) == 1
+        assert response.tool_calls[0].metadata == {"thoughtSignature": "sig-123"}

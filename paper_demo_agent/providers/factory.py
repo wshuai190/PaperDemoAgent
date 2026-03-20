@@ -37,10 +37,12 @@ PROVIDER_DEFAULTS: Dict[str, Dict] = {
     },
     "gemini": {
         "key_env": "GOOGLE_API_KEY",
-        "default_model": "gemini-2.5-flash",
+        "default_model": "auto-gemini-2.5",
         # Static fallback — updated dynamically from the API when a key is present
         "models": [
-            "gemini-2.5-pro", "gemini-2.5-flash",
+            "auto-gemini-3", "auto-gemini-2.5",
+            "gemini-3.1-pro-preview", "gemini-3-flash-preview",
+            "gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite",
             "gemini-2.0-flash",
         ],
     },

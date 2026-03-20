@@ -11,6 +11,7 @@ class ToolCall:
     id: str
     name: str
     arguments: Dict[str, Any]
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
