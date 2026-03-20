@@ -586,6 +586,11 @@ Target: Publication-quality ML architecture diagrams."""
     # Shared helpers
     # ─────────────────────────────────────────────────────────────────────
 
+    def _graphics_reference(self) -> str:
+        """Return the GRAPHICS_REFERENCE string for injection into prompts."""
+        from paper_demo_agent.graphics import GRAPHICS_REFERENCE
+        return GRAPHICS_REFERENCE
+
     def _paper_summary(self, paper: Paper, analysis: PaperAnalysis) -> str:
         authors_list = getattr(paper, "authors", None)
         authors = ", ".join(authors_list) if authors_list else "Unknown"

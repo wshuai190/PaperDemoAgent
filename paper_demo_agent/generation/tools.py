@@ -160,6 +160,30 @@ TOOLS: List[Dict] = [
         },
     },
     {
+        "name": "render_svg",
+        "description": (
+            "Evaluate a Python expression using the graphics primitives module "
+            "and return the resulting SVG string. Available functions include: "
+            "rounded_box, arrow, flow_arrow, layer_stack, parallel_blocks, "
+            "connection_lines, dashed_box, svg_wrapper, encoder_decoder, "
+            "transformer_block, pipeline_flow, comparison_diagram, "
+            "attention_visualization. See GRAPHICS_REFERENCE for full docs."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "expr": {
+                    "type": "string",
+                    "description": (
+                        "Python expression that calls graphics functions and returns an SVG string. "
+                        "Example: pipeline_flow(['Input','Encode','Decode'], title='Pipeline')"
+                    ),
+                },
+            },
+            "required": ["expr"],
+        },
+    },
+    {
         "name": "download_file",
         "description": (
             "Download a file from a URL and save it to the output directory. "
@@ -375,6 +399,19 @@ def tool_extract_pdf_page(
         return f"extract_pdf_page error: {e}"
 
 
+def tool_render_svg(expr: str) -> str:
+    """Evaluate a graphics primitives expression and return the SVG string."""
+    try:
+        import paper_demo_agent.graphics as _g
+        ns = {name: getattr(_g, name) for name in _g.__all__}
+        result = eval(expr, {"__builtins__": {}}, ns)  # noqa: S307
+        if not isinstance(result, str):
+            return f"Error: expression returned {type(result).__name__}, expected str"
+        return result
+    except Exception as e:
+        return f"Error rendering SVG: {e}"
+
+
 def tool_download_file(output_dir: str, url: str, filename: str) -> str:
     """Download a URL and save it inside output_dir."""
     try:
@@ -455,6 +492,8 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], output_dir: str) ->
                 crop=arguments.get("crop"),
                 filename=arguments.get("filename"),
             )
+        elif tool_name == "render_svg":
+            return tool_render_svg(arguments["expr"])
         elif tool_name == "download_file":
             return tool_download_file(output_dir, arguments["url"], arguments["filename"])
         elif tool_name == "web_search":

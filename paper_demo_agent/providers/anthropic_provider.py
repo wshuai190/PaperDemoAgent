@@ -71,7 +71,7 @@ class AnthropicProvider(BaseLLMProvider):
 
     # Claude Code identity headers required for OAuth tokens
     _CLAUDE_CODE_VERSION = "2.1.62"
-    _OAUTH_BETA_FEATURES = "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14"
+    _OAUTH_BETA_FEATURES = "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14,prompt-caching-2024-07-31"
 
     def _client(self):
         try:
@@ -94,17 +94,30 @@ class AnthropicProvider(BaseLLMProvider):
                 },
             )
         else:
-            return anthropic.Anthropic(api_key=self.api_key)
+            return anthropic.Anthropic(
+                api_key=self.api_key,
+                default_headers={
+                    "anthropic-beta": "prompt-caching-2024-07-31",
+                },
+            )
 
     def _convert_tools(self, tools: List[Dict]) -> List[Dict]:
-        """Convert generic tool defs to Anthropic format."""
+        """Convert generic tool defs to Anthropic format.
+
+        Marks the last tool with cache_control to enable prompt caching
+        for tool definitions (they're static across all iterations).
+        """
         converted = []
-        for t in tools:
-            converted.append({
+        for i, t in enumerate(tools):
+            tool_def = {
                 "name": t["name"],
                 "description": t.get("description", ""),
                 "input_schema": t.get("parameters", t.get("input_schema", {"type": "object", "properties": {}})),
-            })
+            }
+            # Cache control on last tool — caches all tools + system prompt
+            if i == len(tools) - 1:
+                tool_def["cache_control"] = {"type": "ephemeral"}
+            converted.append(tool_def)
         return converted
 
     def _parse_response(self, response) -> LLMResponse:
@@ -137,14 +150,34 @@ class AnthropicProvider(BaseLLMProvider):
     def _build_system_kwarg(self, system: str = ""):
         """Build the system kwarg for the API call.
 
-        For OAuth tokens, returns a list of text blocks (required format).
-        For API keys, returns a plain string.
+        For OAuth tokens, returns a list of text blocks with cache_control
+        on the last block. This enables Anthropic prompt caching — the system
+        prompt (which is large and static across iterations) is cached on the
+        first call and reused on subsequent calls, saving ~90% of input tokens
+        on multi-iteration generation loops.
+
+        For API keys, also uses block format with cache_control when the system
+        prompt is large enough to benefit (>1024 tokens ≈ 4KB).
         """
         if self._is_oauth_token:
             blocks = [{"type": "text", "text": self._CLAUDE_CODE_SYSTEM}]
             if system:
-                blocks.append({"type": "text", "text": system})
+                # Mark the last block as cacheable — Anthropic caches everything
+                # up to and including the block with cache_control
+                blocks.append({
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                })
             return blocks
+
+        # For API key auth: use block format with caching if prompt is large enough
+        if system and len(system) > 4000:
+            return [{
+                "type": "text",
+                "text": system,
+                "cache_control": {"type": "ephemeral"},
+            }]
         return system if system else None
 
     def chat(
