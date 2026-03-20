@@ -29,7 +29,7 @@ RESEARCH PHASE — search for these BEFORE writing any code:
   3. web_search("{paper.title} github code") → find official code + pretrained models
   4. web_search("{paper.title} leaderboard papers with code") → find where this ranks
   5. For each major baseline mentioned in the paper:
-     web_search("baseline_name {task_name} results") → verify baseline numbers
+     web_search("baseline_name {{task_name}} results") → verify baseline numbers
 
 STEP 0 — EXTRACT ALL NUMBERS FROM THE PAPER
 Before writing code, list every quantitative result:

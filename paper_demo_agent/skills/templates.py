@@ -4,6 +4,8 @@ These lists define the ideal section order for each output type.
 They are injected into every skill's system prompt via BaseSkill._tool_usage_instructions()
 so the model always knows the expected structure without per-skill duplication.
 """
+from __future__ import annotations
+
 
 PRESENTATION_STRUCTURE: list[str] = [
     "Title",

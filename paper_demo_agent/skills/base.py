@@ -1,4 +1,6 @@
 """Base class and shared helpers for all demo generation skills."""
+from __future__ import annotations
+
 
 from abc import ABC, abstractmethod
 from paper_demo_agent.paper.models import Paper, PaperAnalysis

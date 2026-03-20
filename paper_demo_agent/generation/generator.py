@@ -5,6 +5,8 @@ Phase 2 — BUILD     (up to max_iter):  write all files, implement logic, add i
 Phase 3 — POLISH    (up to 3 iters):   read-review-fix cycle for quality and correctness.
 Post    — VALIDATE  (up to 8 iters):   form-compliance check + auto-correction if needed.
 """
+from __future__ import annotations
+
 
 import base64
 import concurrent.futures

@@ -4,6 +4,8 @@ Each function returns a complete TikZ code string that can be pasted into
 a ``\begin{frame}`` environment.  All templates use the accent colour
 ``#6366f1`` and a consistent dark-theme palette.
 """
+from __future__ import annotations
+
 
 # ── colour definitions for TikZ preamble ──────────────────────────────
 TIKZ_COLOR_DEFS = r"""% Graphics-module colour definitions

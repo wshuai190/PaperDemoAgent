@@ -6,6 +6,8 @@ block or a markdown ```mermaid fence.
 
 All diagrams use the dark theme with the project accent colour.
 """
+from __future__ import annotations
+
 
 _INIT = (
     "%%{init: {'theme': 'dark', 'themeVariables': {"

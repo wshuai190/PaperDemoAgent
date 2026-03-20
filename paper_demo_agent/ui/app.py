@@ -1,4 +1,6 @@
 """Gradio web interface for Paper Demo Agent — commercial-grade dark UI."""
+from __future__ import annotations
+
 
 import os
 import time

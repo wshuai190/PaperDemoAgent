@@ -1,4 +1,6 @@
 """CLI for Paper Demo Agent."""
+from __future__ import annotations
+
 
 import os
 import sys
@@ -27,8 +29,8 @@ def cli():
               help="LLM provider (anthropic, openai, deepseek, qwen, gemini, minimax)")
 @click.option("--model", "-m", default=None, help="Model override")
 @click.option("--form", "-f", default=None,
-              type=click.Choice(["app", "presentation", "page", "diagram"]),
-              help="Demo category (app, presentation, page, diagram)")
+              type=click.Choice(["app", "presentation", "page", "diagram", "website", "slides", "latex", "flowchart"]),
+              help="Demo form (app, presentation, website, page, diagram, slides, latex, flowchart)")
 @click.option("--subtype", "-s", default=None,
               help="Sub-type within category (e.g. gradio, streamlit, revealjs, beamer, pptx, project, readme, blog, mermaid, graphviz)")
 @click.option("--type", "-t", "demo_type", default=None,

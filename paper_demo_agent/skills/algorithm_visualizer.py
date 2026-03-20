@@ -28,7 +28,7 @@ RESEARCH PHASE — search for these BEFORE writing any code:
   3. web_search("{paper.title} benchmark comparison") → verify reported numbers vs baselines
   4. web_search("{analysis.hf_model_query} algorithm visualization") → find existing visualizations for inspiration
   If the algorithm is a variant of a well-known method (e.g., sorting, graph, optimization):
-  5. web_search("VisuAlgo {algorithm_type}") → see how similar algorithms are visualized
+  5. web_search("VisuAlgo {{algorithm_type}}") → see how similar algorithms are visualized
 
 STEP 0 — DECODE THE ALGORITHM
 From the paper, identify:

@@ -1,4 +1,5 @@
 """Paper fetching and parsing for Paper Demo Agent."""
+from __future__ import annotations
 
 import os
 import re

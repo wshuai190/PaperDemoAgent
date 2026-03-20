@@ -163,3 +163,38 @@
 - [ ] Consider `mermaid_gantt(tasks)` for timelines
 - [ ] Consider `treemap_d3(hierarchy_data)` for model/dataset breakdown
 - [ ] Profile: do longer system prompts (math + structure sections) meaningfully increase cost?
+
+---
+
+## Session 4 — 2026-03-21 08:13 (Brisbane) — v2 Post-file-splitting Test
+
+### Test 1: Transformer 1706.03762 --form presentation
+- **Status: PARTIAL** — Build timed out at iteration 6/15 (cron job 5-min limit)
+- demo.html: ✅ generated (22KB, 324 lines)
+- reveal.js: ✅ referenced (3 occurrences)
+- Inline SVGs: ✅ 2 found
+- `<section>` tags: 6 (6 slides written before timeout)
+- Figures extracted: ✅ 5 (fig1-5.png from heuristic fallback — Docling unavailable) + 2 table page screenshots
+- Figure extraction: Docling unavailable (`No module named 'docling_core'`), fell back to heuristic method
+- Root issue: build budget is 15 iterations but cron job allows ~5 min — build was cut mid-way
+- **Fix needed**: Either reduce build iteration budget for faster models, or raise cron timeout
+
+### Test 2: BERT 1810.04805 --form website
+- **`--form website` is INVALID** — valid forms: `app`, `presentation`, `page`, `diagram`
+  - CLI rejects with: "Error: Invalid value for '--form' / '-f': 'website' is not 'app', 'presentation', 'page', 'diagram'"
+  - Ran with `--form page` as nearest equivalent
+- **Status: FAILED** — crash at build iter 6/12 with API error
+- index.html: ❌ NOT generated
+- styles.css: ✅ generated (14KB, 231 lines) — CSS bar chart styles present
+- script.js: ✅ generated (12KB, 297 lines) — dark mode, scroll reveal, tab switching
+- Chart.js: ❌ not used — CSS bar charts in styles.css instead
+- KaTeX: ❌ not used
+- **Crash cause**: Anthropic API 400 error: "tool_use ids found without tool_result blocks"
+  - Tool call at iter 6 wrote styles.css, then model tried to write index.html but first attempted a redundant search (hitting consecutive search limit), which forced a write — but the tool call ID was not matched with a result before the next iteration, causing API malformed conversation error
+  - This is an agentic loop bug: when `↻ Search limit hit — forcing write` triggers mid-iteration, the tool_use/tool_result pairing can get out of sync
+- **Fix needed**: Ensure forced-write nudge doesn't orphan pending tool_use IDs; validate message history before each API call
+
+### Bugs to fix
+1. **Orphaned tool_use IDs on forced-write**: The "search limit → force write" nudge can create unpaired tool_use/tool_result pairs → API 400 crash
+2. **Build timeout**: 15 build iterations × ~30s each ≈ 7.5 min, exceeds 5-min cron limit; consider reducing default budget or adding early exit when main file is done
+3. **`--form website` not a valid CLI option**: Either add it as alias for `page`, or update docs/tests that reference it
