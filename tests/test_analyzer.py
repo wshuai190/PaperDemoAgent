@@ -108,3 +108,119 @@ class TestPaperAnalyzer:
         result = analyzer._parse_json("not valid json at all !!!!")
         assert result["paper_type"] == "other"
         assert result["skill_hint"] == "GeneralQASkill"
+
+    def test_year_parsed_as_int(self):
+        response = {
+            "paper_type": "model",
+            "contribution": "Test",
+            "skill_hint": "ModelInferenceSkill",
+            "demo_form": "app",
+            "demo_subtype": "gradio",
+            "demo_type": "user_demo",
+            "hf_model_query": "",
+            "required_keys": [],
+            "interaction_pattern": "",
+            "reasoning": "",
+            "year": "2024",  # string from LLM
+            "authors": ["Alice", "Bob"],
+        }
+        provider = _make_provider(response)
+        analysis = PaperAnalyzer(provider).analyze(_make_paper())
+        assert analysis.year == 2024
+        assert isinstance(analysis.year, int)
+
+
+class TestAdaptSkillHintForForm:
+    """Tests for PaperAnalyzer.adapt_skill_hint_for_form()."""
+
+    def _make_analysis(self, skill_hint: str, demo_form: str = "app") -> PaperAnalysis:
+        return PaperAnalysis(
+            paper_type="model",
+            contribution="A new model",
+            skill_hint=skill_hint,
+            demo_form=demo_form,
+            demo_type="user_demo",
+            demo_subtype="",
+            hf_model_query="",
+            required_keys=[],
+            interaction_pattern="",
+            reasoning="",
+        )
+
+    def _make_analyzer(self) -> PaperAnalyzer:
+        return PaperAnalyzer(MagicMock())
+
+    def test_overrides_app_skill_to_presentation(self):
+        """When form is 'presentation', skill should become TheoreticalExplainerSkill."""
+        analysis = self._make_analysis("ModelInferenceSkill", "app")
+        result = self._make_analyzer().adapt_skill_hint_for_form(analysis, "presentation")
+        assert result.skill_hint == "TheoreticalExplainerSkill"
+
+    def test_overrides_app_skill_to_slides(self):
+        """When form is 'slides' (pptx), skill should become TheoreticalExplainerSkill."""
+        analysis = self._make_analysis("ModelInferenceSkill", "app")
+        result = self._make_analyzer().adapt_skill_hint_for_form(analysis, "slides")
+        assert result.skill_hint == "TheoreticalExplainerSkill"
+
+    def test_overrides_model_to_readme(self):
+        """When form is 'page_readme', skill should become ReadmeGeneratorSkill."""
+        analysis = self._make_analysis("ModelInferenceSkill", "app")
+        result = self._make_analyzer().adapt_skill_hint_for_form(analysis, "page_readme")
+        assert result.skill_hint == "ReadmeGeneratorSkill"
+
+    def test_overrides_to_blog(self):
+        analysis = self._make_analysis("FindingsDashboardSkill", "website")
+        result = self._make_analyzer().adapt_skill_hint_for_form(analysis, "page_blog")
+        assert result.skill_hint == "BlogExplainerSkill"
+
+    def test_overrides_to_flowchart(self):
+        analysis = self._make_analysis("ModelInferenceSkill", "app")
+        result = self._make_analyzer().adapt_skill_hint_for_form(analysis, "flowchart")
+        assert result.skill_hint == "FlowchartGeneratorSkill"
+
+    def test_overrides_to_graphviz(self):
+        analysis = self._make_analysis("ModelInferenceSkill", "app")
+        result = self._make_analyzer().adapt_skill_hint_for_form(analysis, "diagram_graphviz")
+        assert result.skill_hint == "GraphvizDiagramSkill"
+
+    def test_does_not_override_already_correct_skill(self):
+        """TheoreticalExplainerSkill + presentation → no change."""
+        analysis = self._make_analysis("TheoreticalExplainerSkill", "presentation")
+        result = self._make_analyzer().adapt_skill_hint_for_form(analysis, "presentation")
+        assert result.skill_hint == "TheoreticalExplainerSkill"
+
+    def test_agnostic_skill_not_overridden(self):
+        """GeneralQASkill is agnostic — keep it even if form implies something else."""
+        analysis = self._make_analysis("GeneralQASkill", "app")
+        result = self._make_analyzer().adapt_skill_hint_for_form(analysis, "presentation")
+        assert result.skill_hint == "GeneralQASkill"
+
+    def test_unknown_form_returns_unchanged(self):
+        """Unknown form override → no change to skill_hint."""
+        analysis = self._make_analysis("ModelInferenceSkill", "app")
+        result = self._make_analyzer().adapt_skill_hint_for_form(analysis, "unknown_form_xyz")
+        assert result.skill_hint == "ModelInferenceSkill"
+
+    def test_other_fields_preserved(self):
+        """adapt_skill_hint_for_form should only change skill_hint."""
+        analysis = self._make_analysis("ModelInferenceSkill", "app")
+        analysis_with_contribution = PaperAnalysis(
+            paper_type="model",
+            contribution="Important contribution",
+            skill_hint="ModelInferenceSkill",
+            demo_form="app",
+            demo_type="user_demo",
+            demo_subtype="gradio",
+            hf_model_query="bert model",
+            required_keys=["HF_TOKEN"],
+            interaction_pattern="User inputs text",
+            reasoning="It's a model",
+        )
+        result = self._make_analyzer().adapt_skill_hint_for_form(
+            analysis_with_contribution, "presentation"
+        )
+        assert result.contribution == "Important contribution"
+        assert result.hf_model_query == "bert model"
+        assert result.required_keys == ["HF_TOKEN"]
+        assert result.demo_subtype == "gradio"
+        assert result.skill_hint == "TheoreticalExplainerSkill"  # changed

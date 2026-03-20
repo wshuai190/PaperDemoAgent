@@ -123,10 +123,19 @@ class PaperDemoAgent:
         # Backfill paper metadata from LLM analysis (local PDFs lack this)
         self._backfill_metadata(paper, analysis)
 
+        # When the user explicitly sets --form, adapt skill_hint to match.
+        # e.g. if analyzer chose 'app' for "Attention Is All You Need" but user
+        # wants '--form slides', update skill_hint to TheoreticalExplainerSkill.
+        if resolved_form:
+            from paper_demo_agent.analysis.analyzer import PaperAnalyzer
+            _analyzer_instance = PaperAnalyzer(self.llm)
+            analysis = _analyzer_instance.adapt_skill_hint_for_form(analysis, resolved_form)
+
         _emit(
             f"Analysis: {analysis.paper_type} paper | "
             f"Form: {analysis.demo_form} | Type: {analysis.demo_type}\n"
         )
+        _emit(f"Skill hint: {analysis.skill_hint}\n")
         _emit(f"Reasoning: {analysis.reasoning}\n\n")
 
         # Step 3: Route to skill (pass resolved composite key)
@@ -199,7 +208,10 @@ class PaperDemoAgent:
         _emit(f"Paper loaded from upload: \"{paper.title}\"\n")
         analysis = self.analyze(paper)
         self._backfill_metadata(paper, analysis)
-        _emit(f"Analysis: {analysis.paper_type} | Form: {analysis.demo_form}\n\n")
+        if resolved_form:
+            from paper_demo_agent.analysis.analyzer import PaperAnalyzer
+            analysis = PaperAnalyzer(self.llm).adapt_skill_hint_for_form(analysis, resolved_form)
+        _emit(f"Analysis: {analysis.paper_type} | Form: {analysis.demo_form} | Skill: {analysis.skill_hint}\n\n")
 
         skill = self.router.route(analysis, demo_form=resolved_form)
         _emit(f"Skill: {skill.name}\n\n")

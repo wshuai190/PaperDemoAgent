@@ -1177,26 +1177,28 @@ def _run_loop(
         else:
             messages.append(_anthropic_assistant_message(response))
 
-        # Check if main file exists — nudge model to write it if supporting files exist but main doesn't
+        # Check if main file exists — nudge model EVERY iteration until it writes the main file
         if is_build and iteration >= 1:
             from paper_demo_agent.skills.base import FORM_SPECS as _FS
             _spec = _FS.get(build_form, {})
             _main_file = _spec.get("main_file", "index.html")
             _main_path = Path(output_dir) / _main_file
             _all_files = [f.name for f in Path(output_dir).rglob("*") if f.is_file() and f.name != "paper.pdf"]
-            _has_support = any(f.endswith((".css", ".js")) for f in _all_files)
+            _has_support = any(f.endswith((".css", ".js", ".py", ".txt")) for f in _all_files)
             _has_main = _main_path.exists()
 
-            if _has_support and not _has_main and not skeleton_injected:
+            if _has_support and not _has_main:
+                urgency = "CRITICAL" if iteration >= 3 else "URGENT"
+                iters_left = max_iter - iteration - 1
                 nudge_main = (
-                    f"URGENT: You have written supporting files ({', '.join(f for f in _all_files if f != 'paper.pdf')}) "
-                    f"but NOT the main file '{_main_file}'. Write '{_main_file}' NOW using write_file. "
+                    f"{urgency}: You have written supporting files ({', '.join(f for f in _all_files if f != 'paper.pdf')}) "
+                    f"but NOT the main file '{_main_file}'. You have {iters_left} iterations left. "
+                    f"Write '{_main_file}' NOW using write_file — this is your TOP PRIORITY. "
                     f"Reference your existing CSS/JS files with <link> and <script> tags. "
-                    f"This is the most important file — without it, the demo is broken."
+                    f"Without '{_main_file}', the demo is COMPLETELY BROKEN and all your work is wasted."
                 )
-                on_emit(f"  ↳ Nudging: supporting files exist but no {_main_file}\n")
+                on_emit(f"  ↳ {urgency}: supporting files exist but no {_main_file} ({iters_left} iters left)\n")
                 messages.append({"role": "user", "content": nudge_main})
-                skeleton_injected = True
 
         # Track whether this iteration is search-only (build phase only)
         tool_names = {tc.name for tc in response.tool_calls}
@@ -1281,6 +1283,22 @@ def _run_loop(
             on_emit(f"  ↻ Search limit hit ({search_only_iters} consecutive) — forcing write\n")
             messages.append({"role": "user", "content": nudge})
             search_only_iters = 0  # reset so we don't nudge every iteration
+
+        # Last-resort: 2 iterations before max, if no main file exists, give a FINAL WARNING
+        if is_build and iteration == max_iter - 2:
+            _spec_lr = _FS.get(build_form, {})
+            _main_lr = _spec_lr.get("main_file", "index.html")
+            if not (Path(output_dir) / _main_lr).exists():
+                _files_lr = [f.name for f in Path(output_dir).rglob("*") if f.is_file() and f.name != "paper.pdf"]
+                last_resort = (
+                    f"🚨 FINAL WARNING: You are about to run out of iterations and '{_main_lr}' DOES NOT EXIST. "
+                    f"You have written: {', '.join(_files_lr) if _files_lr else 'nothing'}. "
+                    f"In your NEXT response, you MUST write '{_main_lr}' or ALL your work is lost. "
+                    f"Write a complete, working file — even if it means a simpler version. "
+                    f"Do NOT search, do NOT plan — WRITE THE FILE NOW."
+                )
+                on_emit(f"  🚨 FINAL WARNING: {_main_lr} missing with 2 iterations left!\n")
+                messages.append({"role": "user", "content": last_resort})
     else:
         on_emit(f"  [{phase_label}] max iterations reached.\n")
 

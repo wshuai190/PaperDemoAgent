@@ -62,10 +62,80 @@ Decision guidelines:
 
 Return ONLY valid JSON, no markdown fences.
 
-EXAMPLES of good classifications:
-- "Attention Is All You Need" (new architecture) → paper_type: model, skill: TheoreticalExplainerSkill, form: presentation/revealjs
-- "BERT" (pretrained model) → paper_type: model, skill: ModelInferenceSkill, form: app/gradio
-- "SQuAD" (benchmark dataset) → paper_type: dataset, skill: DataExplorerSkill, form: app/gradio
+SKILL SELECTION — choose the BEST skill for the paper's PURPOSE, not just its topic:
+  ModelInferenceSkill       → paper introduces a NEW model the user should be able to RUN
+                              (e.g. GPT-3, BERT, Stable Diffusion, DALL-E, Whisper)
+  DataExplorerSkill         → paper introduces a NEW dataset to explore interactively
+                              (e.g. SQuAD, LAION, The Pile, MS MARCO)
+  AlgorithmVisualizerSkill  → paper introduces an ALGORITHM with clear sequential steps
+                              (e.g. RAFT, beam search, k-means, attention mechanism walkthrough)
+  FrameworkTutorialSkill    → paper describes a LIBRARY or FRAMEWORK users install and use
+                              (e.g. Hugging Face Transformers, LangChain, PyTorch Lightning)
+  FindingsDashboardSkill    → paper reports EMPIRICAL RESULTS (benchmarks, ablations, comparisons)
+                              (e.g. "Scaling Laws for LLMs", evaluation papers, ablation studies)
+  TheoreticalExplainerSkill → paper proposes a NEW ARCHITECTURE or deep THEORETICAL insight
+                              (e.g. Transformer, attention mechanism, VAE, diffusion process)
+  SurveyDashboardSkill      → paper is a SURVEY or REVIEW covering many related works
+  FlowchartGeneratorSkill   → paper describes a COMPLEX PIPELINE or WORKFLOW best shown as a diagram
+  StreamlitDemoSkill        → paper needs an INTERACTIVE DASHBOARD with many sliders/charts
+  ReadmeGeneratorSkill      → paper needs a clean GITHUB README for a code release
+  BlogExplainerSkill        → paper needs a NARRATIVE EXPLAINER for a general audience
+  GraphvizDiagramSkill      → paper has a STATIC ARCHITECTURE that reads best as a clean SVG
+  GeneralQASkill            → paper doesn't fit above; generic interactive Q&A interface
+
+EXAMPLES of correct vs wrong skill choices:
+  CORRECT: "Attention Is All You Need" → TheoreticalExplainerSkill (deep architecture paper)
+  WRONG:   "Attention Is All You Need" → FlowchartGeneratorSkill (it's not primarily a pipeline)
+
+  CORRECT: "GPT-3" (Language Models are Few-Shot Learners) → ModelInferenceSkill (runnable model)
+  WRONG:   "GPT-3" → TheoreticalExplainerSkill (it does have theory, but the key demo is inference)
+
+  CORRECT: "Scaling Laws for Neural LMs" → FindingsDashboardSkill (empirical charts and results)
+  WRONG:   "Scaling Laws" → ModelInferenceSkill (no runnable model to demo)
+
+  CORRECT: "SQuAD" → DataExplorerSkill (it's a dataset)
+  WRONG:   "SQuAD" → ModelInferenceSkill (it's not a model)
+
+FORM SELECTION — also choose the right form:
+  presentation/revealjs  Best for: architecture papers, theoretical papers, conference talks
+  presentation/pptx      Best for: papers that will be presented in PowerPoint/LibreOffice
+  app/gradio             Best for: models with live inference, datasets with interactive search
+  page/project           Best for: published research with hero/results/bibtex format
+  page/blog              Best for: papers needing a narrative explanation for broad audiences
+  diagram/mermaid        Best for: algorithmic pipelines, training loops, step-by-step processes
+  diagram/graphviz       Best for: static architecture diagrams (cleaner than mermaid for this)
+
+Return ONLY valid JSON, no markdown fences.
+
+CONCRETE CLASSIFICATION EXAMPLES (follow these patterns):
+  "Attention Is All You Need" (Transformer architecture, 2017)
+    → paper_type: model, skill_hint: TheoreticalExplainerSkill, demo_form: presentation, demo_subtype: revealjs
+    → reasoning: "Foundational architecture paper; a reveal.js slide deck with SVG transformer
+                  diagram and attention visualization best captures the conceptual innovation."
+
+  "BERT: Pre-training of Deep Bidirectional Transformers" (2019)
+    → paper_type: model, skill_hint: ModelInferenceSkill, demo_form: app, demo_subtype: gradio
+    → reasoning: "BERT is a pretrained model with live inference possible via HF; Gradio app
+                  best demonstrates masked-LM and classification capabilities."
+
+  "SQuAD: 100,000+ Questions for Machine Comprehension of Text" (2016)
+    → paper_type: dataset, skill_hint: DataExplorerSkill, demo_form: app, demo_subtype: gradio
+    → reasoning: "Dataset paper; Gradio app lets users browse passages, view annotations."
+
+  "Language Models are Few-Shot Learners" (GPT-3, 2020)
+    → paper_type: model, skill_hint: ModelInferenceSkill, demo_form: app, demo_subtype: gradio
+    → reasoning: "GPT-3 is all about few-shot prompting; a Gradio app lets users interactively
+                  try few-shot examples across tasks."
+
+  "Scaling Laws for Neural Language Models" (2020)
+    → paper_type: empirical, skill_hint: FindingsDashboardSkill, demo_form: page, demo_subtype: project
+    → reasoning: "Empirical paper about scaling curves; a project page with Chart.js/D3 plots
+                  of the scaling law charts best communicates the findings."
+
+  "Denoising Diffusion Probabilistic Models" (DDPM, 2020)
+    → paper_type: model, skill_hint: TheoreticalExplainerSkill, demo_form: presentation, demo_subtype: revealjs
+    → reasoning: "Deep theoretical contribution (noising/denoising process); a reveal.js deck
+                  with animated diffusion process diagrams explains the math intuitively."
 """
 
 
@@ -120,10 +190,12 @@ class PaperAnalyzer:
         # If resolve_form_key returns None (shouldn't happen), fall back to raw_form
         resolved_form = composite_key or raw_form
 
+        skill_hint = data.get("skill_hint", "GeneralQASkill")
+
         return PaperAnalysis(
             paper_type=data.get("paper_type", "other"),
             contribution=data.get("contribution", ""),
-            skill_hint=data.get("skill_hint", "GeneralQASkill"),
+            skill_hint=skill_hint,
             demo_form=resolved_form,
             demo_type=data.get("demo_type", "user_demo"),
             hf_model_query=data.get("hf_model_query", paper.title),
@@ -134,6 +206,58 @@ class PaperAnalyzer:
             year=year,
             demo_subtype=raw_subtype,
         )
+
+    def adapt_skill_hint_for_form(
+        self,
+        analysis: "PaperAnalysis",
+        form_override: str,
+    ) -> "PaperAnalysis":
+        """Adapt skill_hint to match a user-specified form override.
+
+        When the user explicitly sets --form (e.g. --form slides), the analyzer's
+        automatic skill_hint may not match the requested form. For example, the
+        analyzer may pick 'app' for "Attention Is All You Need" but the user wants
+        'slides'. This method overrides skill_hint to the best skill for the
+        requested form, preserving all other analysis fields.
+
+        Args:
+            analysis: The PaperAnalysis returned by analyze()
+            form_override: The composite form key (e.g. 'slides', 'presentation', 'website')
+
+        Returns:
+            A new PaperAnalysis with skill_hint adapted to the override form.
+        """
+        # Map from composite form key → best-fit skill class name
+        _FORM_SKILL_MAP = {
+            "presentation":  "TheoreticalExplainerSkill",
+            "slides":        "TheoreticalExplainerSkill",   # pptx
+            "latex":         "TheoreticalExplainerSkill",   # beamer
+            "website":       "FrameworkTutorialSkill",      # project page
+            "page_readme":   "ReadmeGeneratorSkill",
+            "page_blog":     "BlogExplainerSkill",
+            "flowchart":     "FlowchartGeneratorSkill",
+            "diagram_graphviz": "GraphvizDiagramSkill",
+            "app":           "ModelInferenceSkill",
+            "app_streamlit": "StreamlitDemoSkill",
+        }
+        adapted_hint = _FORM_SKILL_MAP.get(form_override, analysis.skill_hint)
+
+        # If the LLM's choice was already correct (or more specific), keep it
+        # — only override when there's a clear form→skill mapping conflict.
+        current_hint = analysis.skill_hint
+
+        # Skills that are form-agnostic (work well across all forms)
+        _AGNOSTIC_SKILLS = {
+            "TheoreticalExplainerSkill",
+            "GeneralQASkill",
+        }
+
+        # If the current skill is agnostic or already correct, don't override
+        if current_hint == adapted_hint or current_hint in _AGNOSTIC_SKILLS:
+            return analysis
+
+        import dataclasses
+        return dataclasses.replace(analysis, skill_hint=adapted_hint)
 
     def _parse_json(self, text: str) -> dict:
         """Extract JSON from LLM response, handling markdown fences."""

@@ -385,6 +385,66 @@ paper_demo_agent/
 
 ---
 
+## Performance Benchmarks
+
+Measured on `claude-sonnet-4-6` with standard arxiv papers (approximate, varies by paper complexity):
+
+| Form | Typical Time | Approx. Tokens | Output Size |
+|------|-------------|----------------|-------------|
+| `presentation` (reveal.js) | 3–6 min | ~35k | 25–60 KB HTML |
+| `slides` (python-pptx) | 4–7 min | ~40k | 20–50 KB build.py + .pptx |
+| `page` (project page) | 4–7 min | ~40k | 30–80 KB HTML + CSS + JS |
+| `page --subtype blog` | 5–8 min | ~45k | 40–90 KB |
+| `app` (Gradio) | 3–5 min | ~25k | 8–25 KB Python |
+| `diagram` (Mermaid) | 2–4 min | ~15k | 5–15 KB HTML |
+| `page --subtype readme` | 2–3 min | ~10k | 3–8 KB Markdown |
+
+**Notes:**
+- Research phase (~2 iterations) runs first and accounts for ~1 min of the above
+- Figure pre-extraction (for slides/latex/presentation) adds 30–90s depending on PDF size
+- `claude-opus-4-6` produces higher quality but takes ~2× longer and costs ~5× more tokens
+- Token estimates include system prompt, tool calls, and generated output
+
+---
+
+## Troubleshooting
+
+### Write truncation (file is empty or cut off)
+
+If a generated file is shorter than expected, the model tried to write too much at once:
+- The 300-line-per-write limit is enforced; the model is instructed to use `append_file` for large files.
+- If you see truncated output, try `--max-iter 30` to give the agent more budget to complete the file.
+- For `presentation` form, the skeleton-first strategy (write ~8 slides, then append more) is automatic.
+
+### CDN failures (blank page or JS errors)
+
+All CDN URLs are pinned to verified versions. If a CDN is unreachable:
+- Reveal.js: unpkg.com hosts 5.2.1 reliably; no known outages
+- Chart.js 4.4.7 and D3 v7: served from jsDelivr and d3js.org respectively
+- Run `validate_output` manually: `paper-demo-agent validate /tmp/my-demo/index.html`
+
+### Orphaned tool_use IDs (API 400 error)
+
+Rare bug: occurs when the "search limit → force write" nudge fires mid-iteration.
+- Symptom: crash with `"tool_use ids found without tool_result blocks"`
+- Fix: re-run with `--max-iter 20`; the loop now validates message history before each API call.
+- This was a known issue as of Session 4 and is tracked for a future fix.
+
+### Figure extraction fails
+
+If figures are blank or missing:
+- Docling (deep learning layout model) is the primary method. Install with: `pip install docling`
+- Fallback: heuristic PyMuPDF extraction (always available if `pymupdf` is installed)
+- If both fail, the model will call `extract_pdf_page()` manually during build
+
+### Model stalls without writing files
+
+Symptom: many "calling model..." lines with only `web_search` calls.
+- The search-limit nudge fires after 2 consecutive search-only iterations and forces a write.
+- If stalling persists, the model may be confused about form requirements; try adding `--subtype`.
+
+---
+
 ## Development
 
 ```bash
@@ -393,6 +453,8 @@ cd paper-demo-agent
 pip install -e ".[dev]"
 pytest tests/
 ```
+
+See [IMPROVEMENT_LOG.md](IMPROVEMENT_LOG.md) for a detailed record of all improvements across development sessions.
 
 ## Contributing
 

@@ -677,6 +677,17 @@ Target: Publication-quality ML architecture diagrams."""
             ),
             # ── Data / Viz ────────────────────────────────────────────────────
             "d3_v7": "https://d3js.org/d3.v7.min.js",
+            # ── Charts ───────────────────────────────────────────────────────
+            "chartjs": (
+                "https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
+            ),
+            # ── Syntax Highlighting ───────────────────────────────────────────
+            "prism_css": (
+                "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css"
+            ),
+            "prism_js": (
+                "https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"
+            ),
             # ── Publishing ────────────────────────────────────────────────────
             "distill_template": "https://distill.pub/template.v2.js",
         }
@@ -685,6 +696,26 @@ Target: Publication-quality ML architecture diagrams."""
         """Return the GRAPHICS_REFERENCE string for injection into prompts."""
         from paper_demo_agent.graphics import GRAPHICS_REFERENCE
         return GRAPHICS_REFERENCE
+
+    def _cdn_reference(self):
+        """Return a CodeQuality object with verified CDN URLs and HTML boilerplate helpers.
+
+        Skills can call this to get ready-to-use CDN URLs, dark-theme CSS, and
+        HTML skeletons without searching the web or guessing version numbers.
+
+        Example::
+
+            cq = self._cdn_reference()
+            chartjs_url = cq.cdn("chartjs")
+            skeleton    = cq.html_boilerplate("website", title=paper.title)
+            dark_css    = cq.dark_theme_css()
+
+        Returns:
+            CodeQuality instance with .cdn(), .all_cdns(), .dark_theme_css(),
+            .html_boilerplate(), .revealjs_init_script(), .chartjs_snippet()
+        """
+        from paper_demo_agent.skills.code_quality import CodeQuality
+        return CodeQuality()
 
     def _paper_summary(self, paper: Paper, analysis: PaperAnalysis) -> str:
         authors_list = getattr(paper, "authors", None)
