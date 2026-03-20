@@ -4,11 +4,59 @@ from paper_demo_agent.paper.models import Paper, PaperAnalysis
 from paper_demo_agent.skills.base import BaseSkill, FORM_SPECS
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Pre-baked knowledge — dataset exploration patterns
+# ─────────────────────────────────────────────────────────────────────────────
+
+_DATASET_KNOWLEDGE = """
+━━ DATASET EXPLORATION PATTERNS (use verbatim, do NOT search) ━━
+
+MODALITY-SPECIFIC VISUALIZATION:
+  TEXT datasets:
+    • Word cloud (top 100 tokens, exclude stopwords)
+    • Sequence length histogram (token count distribution)
+    • Label/class distribution bar chart
+    • Example quality: show 5 representative samples per class
+    • Vocabulary statistics: size, OOV rate, average token frequency
+    • Language detection if multilingual
+
+  IMAGE datasets:
+    • Grid of sample images (4x4 or 3x3 grid per class)
+    • Resolution distribution scatter plot (width vs height)
+    • Aspect ratio histogram
+    • Class distribution with sample image per class
+    • Pixel intensity statistics (mean, std per channel)
+
+  AUDIO datasets:
+    • Duration histogram (seconds per clip)
+    • Sample rate and bit depth info
+    • Spectrogram visualization for example clips
+    • Speaker/class distribution
+
+  TABULAR datasets:
+    • Feature type summary (numeric vs categorical vs datetime)
+    • Missing value heatmap
+    • Correlation matrix for numeric features
+    • Distribution per feature (histogram grid)
+
+DATASET COMPARISON TABLE (always include):
+  | Dataset      | Year | Size    | Task       | Modality | Languages | License |
+  |:-------------|:----:|:-------:|:-----------|:---------|:----------|:--------|
+  | THIS DATASET | YYYY | N rows  | task_name  | modality | langs     | license |
+  | Competing A  | YYYY | M rows  | task_name  | modality | langs     | license |
+  | Competing B  | YYYY | K rows  | task_name  | modality | langs     | license |
+  Hard-code ALL rows from the paper's comparison table.
+"""
+
+
 class DataExplorerSkill(BaseSkill):
     name = "DataExplorerSkill"
     description = "Dataset paper → interactive data explorer (Gradio app / presentation / website)"
 
     def get_system_prompt(self, paper: Paper, analysis: PaperAnalysis, demo_form: str, demo_type: str) -> str:
+        # Form-specific guidance
+        form_guidance = self._form_specific_guidance(demo_form)
+
         return f"""You are a senior data engineer and visualization specialist who has built
 production-grade dataset explorers for HuggingFace, Kaggle, and Papers with Code.
 
@@ -21,12 +69,24 @@ PAPER CONTEXT:
 
 ━━ SKILL CONTEXT — Dataset Paper ━━
 
+RESEARCH PHASE — search for these BEFORE writing any code:
+  1. search_huggingface(query="{analysis.hf_model_query}", type="dataset", limit=8)
+     → Find the official dataset on HuggingFace Hub
+  2. web_search("{paper.title} dataset huggingface") → find dataset card and loading instructions
+  3. web_search("{paper.title} github dataset") → find official data repository
+  4. web_search("{paper.title} benchmark leaderboard") → find benchmark results if applicable
+  These searches help you load real data and embed accurate metadata.
+
 STEP 0 — UNDERSTAND THE DATASET
 From the paper abstract and context, identify:
   • Data modality: text / image / audio / video / tabular / multimodal
   • Task: classification, generation, retrieval, QA, segmentation, etc.
   • Scale: # examples, # classes, # splits
   • Unique properties: annotation method, languages, domains, quality metrics
+
+{_DATASET_KNOWLEDGE}
+
+{form_guidance}
 
 HUGGINGFACE DATASETS SEARCH:
   1. search_huggingface(query="{analysis.hf_model_query}", type="dataset", limit=8)
@@ -129,6 +189,44 @@ SEARCH/FILTER LOGIC:
 {self._tool_usage_instructions()}
 """
 
+    def _form_specific_guidance(self, demo_form: str) -> str:
+        """Return guidance for adapting dataset exploration to non-app forms."""
+        if demo_form == "presentation":
+            return """FORM ADAPTATION — PRESENTATION (reveal.js):
+  Present the dataset as a conference-style data paper talk:
+  • Slide 1: Title + dataset name + key stats (N examples, N classes)
+  • Slide 2: Motivation — why this dataset is needed (gap in existing data)
+  • Slide 3: Data collection methodology (annotation pipeline as SVG diagram)
+  • Slide 4-5: Dataset statistics (inline SVG bar charts for distributions)
+  • Slide 6: Sample examples (formatted excerpts or described images)
+  • Slide 7: Comparison table vs existing datasets (styled HTML table)
+  • Slide 8: Benchmark results on this dataset
+  • Slide 9: Data quality analysis (inter-annotator agreement, etc.)
+  • Slide 10-11: Use cases and limitations
+  • Slide 12: How to access + license info
+  • Slide 13: Conclusion + BibTeX
+  • Slide 14: Q&A"""
+        elif demo_form == "website":
+            return """FORM ADAPTATION — WEBSITE (static HTML):
+  Build a dataset landing page (like a HuggingFace Dataset Card but richer):
+  • Hero: dataset name, key stats badges, download/access buttons
+  • Section 1: Overview — what, why, how (2-3 paragraphs)
+  • Section 2: Statistics dashboard — Chart.js charts for distributions, sizes
+  • Section 3: Sample browser — paginated table with 10-20 pre-loaded examples
+  • Section 4: Comparison table vs competing datasets (bold best)
+  • Section 5: Data collection methodology (SVG pipeline diagram)
+  • Section 6: Benchmark leaderboard (results table with known model scores)
+  • Section 7: Access instructions + license + BibTeX
+  Use Chart.js v4 CDN for charts: https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"""
+        elif demo_form in ("slides", "latex"):
+            return """FORM ADAPTATION — SLIDES:
+  Present dataset paper as structured slides:
+  • Extract PDF figures showing data examples, collection pipeline, statistics
+  • Use extract_pdf_page to embed the paper's own visualizations
+  • Hard-code ALL comparison tables as structured add_table/tabular
+  • Include annotation pipeline as a diagram"""
+        return ""
+
     def get_initial_message(self, paper: Paper, analysis: PaperAnalysis, demo_form: str, demo_type: str) -> str:
         return f"""Build a professional {demo_form} data explorer for: "{paper.title}"
 
@@ -139,9 +237,11 @@ Data modality / task: {analysis.interaction_pattern}
 
 PRIORITY ORDER:
 1. Search HuggingFace Datasets for this dataset (or closest match)
-2. Load a sample (200 rows max, streaming) or create realistic synthetic data
-3. Build multi-tab explorer: Browse (searchable table) + Statistics (charts) + Inspect + About
-4. Hard-code key statistics from the paper (split sizes, class counts, etc.)
+2. web_search for the paper's arXiv URL, official GitHub repo, and dataset card
+3. Load a sample (200 rows max, streaming) or create realistic synthetic data
+4. Build multi-tab explorer: Browse (searchable table) + Statistics (charts) + Inspect + About
+5. Hard-code key statistics from the paper (split sizes, class counts, etc.)
+6. Include a comparison table vs competing datasets with ALL numbers from the paper
 
 The result must feel like a professional dataset card on Papers with Code.
 Follow the execution plan step by step.

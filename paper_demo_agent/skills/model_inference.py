@@ -21,6 +21,15 @@ PAPER CONTEXT:
 
 ━━ SKILL CONTEXT — ML Model Paper ━━
 
+RESEARCH PHASE — search for these BEFORE writing any code:
+  1. search_huggingface(query="{analysis.hf_model_query}", type="model", limit=8)
+     → Find official or closest model weights on HuggingFace Hub
+  2. web_search("{paper.title} huggingface model") → find model card, usage examples
+  3. web_search("{paper.title} github code") → find official implementation repository
+  4. web_search("{paper.title} benchmark results") → cross-verify reported numbers
+  5. If model paper from a major lab: web_search("{paper.title} blog post")
+     → Often has simplified explanations and official demo links
+
 STEP 0 — IDENTIFY WHAT THIS MODEL DOES
 Before writing any code, determine the model's task. Match it to a Gradio interface:
   • Text classification / NER / summarization / translation → gr.Textbox in + gr.Textbox out
@@ -121,6 +130,35 @@ CUSTOM_CSS template:
     border-radius: 12px; padding: 24px; margin-bottom: 16px; }}
   #paper-header h1 {{ font-size: 22px; font-weight: 700; color: #fff; margin: 0 0 4px; }}
   ```
+
+FORM ADAPTATION — when the demo form is NOT 'app':
+
+  PRESENTATION (reveal.js) — present the model as a conference talk:
+    • Slide 1: Title + model name + task + key metric
+    • Slide 2: Problem — what task does this model solve? Why is it hard?
+    • Slide 3-4: Architecture — inline SVG diagram of model structure
+    • Slide 5-6: Method — key innovations (attention mechanism, loss function, etc.)
+    • Slide 7: Training details — data, compute, hyperparameters
+    • Slide 8-9: Results — comparison table/chart vs baselines (ALL numbers from paper)
+    • Slide 10: Ablation — which components matter most?
+    • Slide 11: Demo examples — show model inputs → outputs (formatted text/images)
+    • Slide 12: Limitations and failure cases
+    • Slide 13: Conclusion + BibTeX
+    • Slide 14: Q&A
+
+  WEBSITE (static HTML) — build a model card / project page:
+    • Hero: model name, task description, key metric badge, [Try Demo] [Paper] [Code] buttons
+    • Architecture section: SVG diagram of model with labeled components
+    • Results section: Chart.js grouped bar chart comparing to ALL baselines
+    • Examples section: 3-5 input→output pairs displayed in styled cards
+    • Technical details: training data, compute requirements, hyperparameters
+    • Limitations section: known failure modes, biases, out-of-distribution behavior
+    • BibTeX + license info
+
+  SLIDES / LATEX — use extract_pdf_page to embed architecture figures:
+    • Extract the architecture diagram, results tables, and example figures from the PDF
+    • Hard-code ALL benchmark numbers as structured tables (add_table / tabular)
+    • Include a chart comparing method vs baselines
 
 REQUIREMENTS.TXT RULES:
   • Include exact versions: `gradio>=5.0,<6.0`

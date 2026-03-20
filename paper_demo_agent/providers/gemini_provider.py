@@ -76,15 +76,35 @@ class GeminiProvider(BaseLLMProvider):
             augmented[first_user] = {"role": "user", "content": [pdf_part] + text_parts}
         return self.chat(augmented, system=system, tools=tools, max_tokens=max_tokens)
 
+    @property
+    def _is_gemini_cli_token(self) -> bool:
+        """Check if the API key is a Gemini CLI JSON credential."""
+        if not self.api_key:
+            return False
+        try:
+            data = json.loads(self.api_key)
+            return isinstance(data, dict) and "token" in data and "projectId" in data
+        except (json.JSONDecodeError, TypeError):
+            return False
+
     def _get_genai(self):
         try:
             import google.generativeai as genai
         except ImportError:
             raise ImportError("google-generativeai is required: pip install google-generativeai")
 
-        if self.api_key:
-            genai.configure(api_key=self.api_key)
-        else:
+        if self.api_key and self._is_gemini_cli_token:
+            # Gemini CLI credential: use OAuth access token via google.oauth2
+            data = json.loads(self.api_key)
+            access_token = data["token"]
+            try:
+                from google.oauth2.credentials import Credentials
+                credentials = Credentials(token=access_token)
+                genai.configure(credentials=credentials)
+            except ImportError:
+                # Fallback: set as API key (may not work for all endpoints)
+                genai.configure(api_key=access_token)
+        elif self.api_key:
             # Fall back to Application Default Credentials (gcloud auth application-default login)
             try:
                 import google.auth

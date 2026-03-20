@@ -23,6 +23,14 @@ PAPER CONTEXT:
 
 ━━ SKILL CONTEXT — Empirical Study Paper ━━
 
+RESEARCH PHASE — search for these BEFORE writing any code:
+  1. web_search("{paper.title} arxiv") → get arXiv URL for citation links
+  2. web_search("{paper.title} results benchmark") → cross-verify reported numbers
+  3. web_search("{paper.title} github code") → find official code + pretrained models
+  4. web_search("{paper.title} leaderboard papers with code") → find where this ranks
+  5. For each major baseline mentioned in the paper:
+     web_search("baseline_name {task_name} results") → verify baseline numbers
+
 STEP 0 — EXTRACT ALL NUMBERS FROM THE PAPER
 Before writing code, list every quantitative result:
   • Main benchmarks: task, metric, dataset, proposed method score, baseline scores
@@ -139,6 +147,32 @@ DESIGN RULES FOR WEBSITE:
   • Highlight OUR METHOD row in all tables with a colored left border
   • Charts must use dark background: `backgroundColor: '#09090b'` for Chart.js
 
+FORM ADAPTATION — when the demo form is NOT 'app' or 'website':
+
+  PRESENTATION (reveal.js):
+    • Slide 1: Title + headline result ("Achieves X — Y points above SOTA")
+    • Slide 2: Problem + motivation (why these experiments matter)
+    • Slide 3: Experimental setup (datasets, metrics, baselines)
+    • Slide 4-5: Main results — comparison table + grouped bar chart as inline SVG
+    • Slide 6: Ablation study — component contribution visualization
+    • Slide 7: Efficiency analysis — accuracy vs compute scatter as SVG
+    • Slide 8: Key insights — 3-5 numbered takeaways with fragments
+    • Slide 9-10: Qualitative examples (if applicable)
+    • Slide 11: Statistical significance / confidence analysis
+    • Slide 12: Limitations → Slide 13: Conclusion → Slide 14: Q&A
+
+  SLIDES / LATEX:
+    • MANDATORY: Extract result tables and charts from PDF using extract_pdf_page
+    • Hard-code ALL comparison numbers as structured tables (add_table / tabular)
+    • Use add_chart / TikZ for visual comparisons
+    • Include ablation results as a separate table
+    • Efficiency scatter plot using matplotlib → BytesIO → add_picture
+
+FIGURE INTEGRATION (for slides/latex/presentation forms):
+  • Use extract_pdf_page to embed the paper's own result figures and charts
+  • ALWAYS reproduce comparison tables as structured data (not image embeds)
+  • Embed qualitative example figures from the paper where applicable
+
 {self._multistep_instructions(demo_form)}
 
 {self._tool_usage_instructions()}
@@ -164,24 +198,57 @@ Follow the execution plan step by step.
     def get_polish_prompt(self, paper, analysis, demo_form, demo_type, generated_files):
         spec = FORM_SPECS.get(demo_form, {})
         main_file = spec.get("main_file", "app.py")
-        return f"""QUALITY REVIEW for Findings Dashboard — generated: {', '.join(generated_files[:12])}
+        figures_available = [f for f in generated_files if f.startswith("figures/")]
 
-Step 1 — Read {main_file}:
+        base_checks = f"""QUALITY REVIEW for Findings Dashboard — generated: {', '.join(generated_files[:12])}
+
+Step 1 — Read {main_file} and verify data accuracy:
   • Are ALL quantitative results hardcoded (not placeholder numbers like 0.0 or 100)?
-  • Is the proposed method highlighted/distinguished from baselines in all charts?
-  • Is there an ablation study visualization?
-  • Does the headline stat card show the main finding prominently?
+  • Is the proposed method highlighted/distinguished from baselines?
+  • Are dataset/task names exactly matching those in the paper?
+  • Is there a BibTeX citation block?"""
 
+        if demo_form in ("app", "website"):
+            return base_checks + """
 Step 2 — Chart quality:
   • Are bar charts grouped (all metrics side by side for all methods)?
   • Do charts have proper axis labels, titles, and legends?
   • Are dark themes applied to all charts?
   • Is there an efficiency plot (accuracy vs. parameters/FLOPs)?
+  • Is there an ablation study visualization?
+  • Does the headline stat card show the main finding prominently?
 
-Step 3 — Content:
+Step 3 — Content completeness:
   • Is there a "Key Insights" section with 5+ numbered takeaways?
-  • Are dataset/task names exactly matching those in the paper?
-  • Is there a BibTeX citation block?
+
+Fix anything missing. The dashboard should let a reviewer understand the paper's
+contribution in under 2 minutes."""
+        elif demo_form == "presentation":
+            return base_checks + """
+Step 2 — Slide-specific:
+  • Is there a headline result on slide 1 or 2 ("Achieves X — Y above SOTA")?
+  • Are results shown as both a table AND a chart (SVG bar chart)?
+  • Is there an ablation slide showing component contributions?
+  • Are there >=14 slides covering setup, results, ablation, insights?
+  • Do all bullet lists use class="fragment"?
+
+Step 3 — Visual:
+  • Are inline SVG charts used for main results comparison?
+  • Is the proposed method visually distinguished (different color)?
+
+Fix everything. Target: NeurIPS spotlight results presentation."""
+        elif demo_form in ("slides", "latex"):
+            figs_line = f"  • Pre-extracted figures: {', '.join(figures_available)}\n" if figures_available else ""
+            return base_checks + f"""
+Step 2 — Slide content:
+{figs_line}  • Are extracted figures embedded in relevant slides?
+  • Are ALL comparison tables structured (add_table/tabular, NOT images)?
+  • Is there a chart (add_chart/TikZ) for the main results comparison?
+  • Is there an ablation table or chart?
+
+Fix everything. Target: conference oral presentation quality."""
+        else:
+            return base_checks + """
 
 Fix anything missing. The dashboard should let a reviewer understand the paper's
 contribution in under 2 minutes."""

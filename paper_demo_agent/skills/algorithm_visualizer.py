@@ -22,6 +22,14 @@ PAPER CONTEXT:
 
 ━━ SKILL CONTEXT — Algorithm Paper ━━
 
+RESEARCH PHASE — search for these BEFORE writing any code:
+  1. web_search("{paper.title} arxiv") → get arXiv URL for citation links
+  2. web_search("{paper.title} github implementation") → find reference implementations
+  3. web_search("{paper.title} benchmark comparison") → verify reported numbers vs baselines
+  4. web_search("{analysis.hf_model_query} algorithm visualization") → find existing visualizations for inspiration
+  If the algorithm is a variant of a well-known method (e.g., sorting, graph, optimization):
+  5. web_search("VisuAlgo {algorithm_type}") → see how similar algorithms are visualized
+
 STEP 0 — DECODE THE ALGORITHM
 From the paper, identify:
   • Input/output types: graph, array, text, matrix, set, numbers?
@@ -133,6 +141,41 @@ PSEUDOCODE DISPLAY (always include):
   • Link each step in the visualization to a line in the pseudocode
   • Highlight the "current line" as the algorithm progresses
 
+FORM ADAPTATION — when the demo form is NOT 'app':
+
+  PRESENTATION (reveal.js):
+    • Slide 1: Title + algorithm name + key complexity result
+    • Slide 2: Problem — what does this algorithm solve? (with concrete example)
+    • Slide 3: Pseudocode slide (syntax-highlighted code block)
+    • Slide 4-7: Step-by-step walkthrough — each slide shows one algorithm step
+      using data-auto-animate to smoothly transition between states.
+      Use inline SVG to draw array states, graph states, or tree structures.
+    • Slide 8: Complexity analysis (time + space, with comparison table)
+    • Slide 9: Benchmark results vs baselines (grouped bar chart as SVG)
+    • Slide 10-11: Real-world applications and examples
+    • Slide 12: Limitations and edge cases
+    • Slide 13: Conclusion + BibTeX → Slide 14: Q&A
+
+  WEBSITE (static HTML):
+    • Hero: algorithm name, one-line description, complexity badges
+    • Interactive section: step slider that updates an SVG visualization
+      (use vanilla JS to animate array bars, graph nodes, or matrix cells)
+    • Pseudocode panel with line highlighting synchronized to step slider
+    • Performance comparison: Chart.js bar chart with real numbers
+    • Complexity analysis section with formal proofs (KaTeX)
+    • BibTeX + copy button
+
+  SLIDES / LATEX:
+    • Extract algorithm pseudocode figures from the PDF using extract_pdf_page
+    • Use TikZ or matplotlib to create step-by-step diagrams
+    • Hard-code ALL benchmark comparison numbers as tables
+    • Show complexity analysis with formal notation
+
+FIGURE INTEGRATION (for slides/latex/presentation forms):
+  • Use extract_pdf_page to get the paper's own algorithm diagrams and result figures
+  • Embed extracted figures in the relevant slides
+  • Reproduce comparison tables as structured data (not image embeds)
+
 {self._multistep_instructions(demo_form)}
 
 {self._tool_usage_instructions()}
@@ -158,23 +201,70 @@ slow it down, and understand why each step happens. Follow the execution plan.
     def get_polish_prompt(self, paper, analysis, demo_form, demo_type, generated_files):
         spec = FORM_SPECS.get(demo_form, {})
         main_file = spec.get("main_file", "app.py")
-        return f"""QUALITY REVIEW for Algorithm Visualizer — generated: {', '.join(generated_files[:12])}
+        figures_available = [f for f in generated_files if f.startswith("figures/")]
+
+        base_checks = f"""QUALITY REVIEW for Algorithm Visualizer — generated: {', '.join(generated_files[:12])}
 
 Step 1 — Read {main_file} and verify:
   • Is the algorithm implemented correctly (not a stub)?
+  • Are benchmark numbers from the paper hardcoded in the comparison section?
+  • Is time/space complexity stated clearly?
+  • Is there a pseudocode block or algorithm description?"""
+
+        if demo_form == "app":
+            return base_checks + f"""
+Step 2 — Interactivity:
   • Does the step slider show the correct state at each step (not just the final)?
   • Are plots dark-themed (template="plotly_dark")?
   • Do parameter sliders actually affect the algorithm's behavior?
-
-Step 2 — Content:
-  • Is there a pseudocode block?
-  • Are benchmark numbers from the paper hardcoded in the comparison tab?
-  • Is time/space complexity stated clearly?
-
-Step 3 — UX:
   • Can users click "Run" and immediately see something happen?
   • Are the step descriptions clear and informative (not just "Step 3")?
   • Does the "Compare" tab show at least 3 methods with real metrics?
 
+Step 3 — UX polish:
+  • Does the header show paper title and authors?
+  • Does the About tab have abstract and BibTeX?
+
 Rewrite anything that falls short. The visualization should make the algorithm
+impossible NOT to understand."""
+        elif demo_form == "presentation":
+            return base_checks + f"""
+Step 2 — Slide-specific checks:
+  • Are there >=14 slides covering the full algorithm story?
+  • Do step-by-step slides use data-auto-animate for smooth transitions?
+  • Are there inline SVG diagrams showing algorithm state at key steps?
+  • Does the results slide have a real comparison table with paper numbers?
+  • Do all list slides use class="fragment"?
+
+Step 3 — Content completeness:
+  • Is the pseudocode shown on a dedicated slide?
+  • Are complexity results (time/space) shown with formal notation?
+
+Fix everything. Target: algorithm tutorial talk quality."""
+        elif demo_form == "website":
+            return base_checks + f"""
+Step 2 — Interactive visualization:
+  • Is there a step slider that updates an SVG/canvas visualization?
+  • Does the pseudocode panel highlight the current line?
+  • Is there a Chart.js comparison chart with real paper numbers?
+  • Does the dark mode toggle work?
+
+Step 3 — Content:
+  • Are all benchmark baselines included in the comparison?
+  • Is the complexity analysis section present with KaTeX math?
+
+Fix everything. Target: VisuAlgo-quality interactive explainer."""
+        elif demo_form in ("slides", "latex"):
+            figs_line = f"  • Pre-extracted figures: {', '.join(figures_available)}\n" if figures_available else ""
+            return base_checks + f"""
+Step 2 — Slide content:
+{figs_line}  • Are extracted figures embedded in relevant slides?
+  • Are ALL benchmark numbers hard-coded as structured tables?
+  • Is there a diagram showing the algorithm flow (TikZ or matplotlib)?
+
+Fix everything. Target: conference oral presentation quality."""
+        else:
+            return base_checks + """
+
+Fix anything that falls short. The visualization should make the algorithm
 impossible NOT to understand."""

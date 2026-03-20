@@ -76,7 +76,7 @@ def create_provider(
     Returns:
         Configured BaseLLMProvider instance
     """
-    from paper_demo_agent import config as cfg
+    from paper_demo_agent.keys.manager import KeyManager
 
     name = provider_name.lower().strip()
     if name not in PROVIDER_DEFAULTS:
@@ -86,15 +86,23 @@ def create_provider(
 
     info = PROVIDER_DEFAULTS[name]
 
-    # Resolve API key (config > env var > caller-supplied)
-    key = api_key or cfg.get_key(info["key_env"])
+    # Resolve API key via KeyManager (OpenClaw OAuth > Claude Code > config > env > tools)
+    km = KeyManager()
+    if api_key:
+        key = api_key
+    else:
+        key, source = km.get_with_source(info["key_env"])
+        if source:
+            import sys
+            print(f"[paper-demo-agent] Using {info['key_env']} from {source}", file=sys.stderr)
 
     # Gemini can authenticate via Google Application Default Credentials — no key required
     if not key and name != "gemini":
         raise RuntimeError(
             f"API key not found for provider '{name}'. "
             f"Set {info['key_env']} via environment or:\n"
-            f"  paper-demo-agent key set {info['key_env']} <value>"
+            f"  paper-demo-agent key set {info['key_env']} <value>\n"
+            f"  Or authenticate via Claude Code (auto-detected from `claude login`)"
         )
 
     if name == "anthropic":
@@ -118,7 +126,7 @@ def create_provider(
         return GeminiProvider(api_key=key, model=model)
 
     elif name == "minimax":
-        group_id = kwargs.get("group_id") or cfg.get_key("MINIMAX_GROUP_ID")
+        group_id = kwargs.get("group_id") or km.get("MINIMAX_GROUP_ID")
         if not group_id:
             raise RuntimeError(
                 "MiniMax requires MINIMAX_GROUP_ID. "

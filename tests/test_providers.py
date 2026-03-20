@@ -43,13 +43,14 @@ class TestFactory:
             create_provider("nonexistent_provider", api_key="fake")
 
     def test_missing_api_key(self):
+        # Use deepseek instead of anthropic — anthropic may find keys via
+        # tool credential detection (Claude Code, OpenClaw, Aider).
         with pytest.raises(RuntimeError, match="API key not found"):
-            # Ensure env is clean
             import os
-            env_key = "ANTHROPIC_API_KEY"
+            env_key = "DEEPSEEK_API_KEY"
             old = os.environ.pop(env_key, None)
             try:
-                create_provider("anthropic", api_key=None)
+                create_provider("deepseek", api_key=None)
             finally:
                 if old:
                     os.environ[env_key] = old

@@ -8,7 +8,13 @@ from paper_demo_agent.providers.base import BaseLLMProvider, LLMResponse, ToolCa
 
 
 class AnthropicProvider(BaseLLMProvider):
-    """LLM provider for Anthropic Claude models."""
+    """LLM provider for Anthropic Claude models.
+
+    Supports both API key auth (x-api-key header) and OAuth/setup-token auth
+    (Authorization: Bearer header). OAuth tokens are auto-detected from the key
+    prefix: sk-ant-oat01-* tokens use Bearer auth, standard sk-ant-api* tokens
+    use API key auth.
+    """
 
     MODELS = [
         "claude-opus-4-6",
@@ -17,6 +23,9 @@ class AnthropicProvider(BaseLLMProvider):
         "claude-3-5-sonnet-20241022",
         "claude-3-5-haiku-20241022",
     ]
+
+    # Token prefixes that indicate OAuth / setup-token (Bearer auth)
+    OAUTH_TOKEN_PREFIXES = ("sk-ant-oat01-",)
 
     @property
     def default_model(self) -> str:
@@ -28,6 +37,13 @@ class AnthropicProvider(BaseLLMProvider):
     @property
     def supports_native_pdf(self) -> bool:
         return True
+
+    @property
+    def _is_oauth_token(self) -> bool:
+        """Check if the API key is actually an OAuth/setup-token."""
+        if not self.api_key:
+            return False
+        return any(self.api_key.startswith(p) for p in self.OAUTH_TOKEN_PREFIXES)
 
     def chat_with_pdf(
         self,
@@ -53,12 +69,32 @@ class AnthropicProvider(BaseLLMProvider):
             augmented[first_user] = {"role": "user", "content": [pdf_block] + list(content)}
         return self.chat(augmented, system=system, tools=tools, max_tokens=max_tokens)
 
+    # Claude Code identity headers required for OAuth tokens
+    _CLAUDE_CODE_VERSION = "2.1.62"
+    _OAUTH_BETA_FEATURES = "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14"
+
     def _client(self):
         try:
             import anthropic
         except ImportError:
             raise ImportError("anthropic package is required: pip install anthropic")
-        return anthropic.Anthropic(api_key=self.api_key)
+
+        if self._is_oauth_token:
+            # OAuth / setup-token: use Bearer auth with Claude Code identity headers.
+            # The API requires these headers to accept OAuth tokens — it must
+            # believe the request comes from Claude Code.
+            return anthropic.Anthropic(
+                api_key=None,
+                auth_token=self.api_key,
+                default_headers={
+                    "anthropic-beta": self._OAUTH_BETA_FEATURES,
+                    "user-agent": f"claude-cli/{self._CLAUDE_CODE_VERSION}",
+                    "x-app": "cli",
+                    "anthropic-dangerous-direct-browser-access": "true",
+                },
+            )
+        else:
+            return anthropic.Anthropic(api_key=self.api_key)
 
     def _convert_tools(self, tools: List[Dict]) -> List[Dict]:
         """Convert generic tool defs to Anthropic format."""
@@ -95,6 +131,22 @@ class AnthropicProvider(BaseLLMProvider):
             raw=response,
         )
 
+    # System prompt prefix required for OAuth tokens
+    _CLAUDE_CODE_SYSTEM = "You are Claude Code, Anthropic's official CLI for Claude."
+
+    def _build_system_kwarg(self, system: str = ""):
+        """Build the system kwarg for the API call.
+
+        For OAuth tokens, returns a list of text blocks (required format).
+        For API keys, returns a plain string.
+        """
+        if self._is_oauth_token:
+            blocks = [{"type": "text", "text": self._CLAUDE_CODE_SYSTEM}]
+            if system:
+                blocks.append({"type": "text", "text": system})
+            return blocks
+        return system if system else None
+
     def chat(
         self,
         messages: List[Dict],
@@ -103,13 +155,14 @@ class AnthropicProvider(BaseLLMProvider):
         max_tokens: int = 8192,
     ) -> LLMResponse:
         client = self._client()
+        system_kwarg = self._build_system_kwarg(system)
         kwargs = dict(
             model=self.model,
             max_tokens=max_tokens,
             messages=messages,
         )
-        if system:
-            kwargs["system"] = system
+        if system_kwarg:
+            kwargs["system"] = system_kwarg
         if tools:
             kwargs["tools"] = self._convert_tools(tools)
 
@@ -124,13 +177,14 @@ class AnthropicProvider(BaseLLMProvider):
         max_tokens: int = 8192,
     ) -> Iterator[str]:
         client = self._client()
+        system_kwarg = self._build_system_kwarg(system)
         kwargs = dict(
             model=self.model,
             max_tokens=max_tokens,
             messages=messages,
         )
-        if system:
-            kwargs["system"] = system
+        if system_kwarg:
+            kwargs["system"] = system_kwarg
         if tools:
             kwargs["tools"] = self._convert_tools(tools)
 

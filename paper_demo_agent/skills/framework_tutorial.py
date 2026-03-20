@@ -22,6 +22,14 @@ PAPER CONTEXT:
 
 ━━ SKILL CONTEXT — Framework / Library Paper ━━
 
+RESEARCH PHASE — search for these BEFORE writing any code:
+  1. web_search("{paper.title} github") → find official repository, README, docs
+  2. web_search("{paper.title} pip install") → find package name and install command
+  3. web_search("{paper.title} tutorial quickstart") → find official examples
+  4. web_search("{paper.title} benchmark comparison") → verify performance claims
+  5. search_huggingface(query="{analysis.hf_model_query}", type="model", limit=5)
+     → Check if the framework has models/datasets on HuggingFace
+
 STEP 0 — UNDERSTAND THE FRAMEWORK
 From the paper, identify:
   • What problem does it solve? What's the core abstraction?
@@ -134,6 +142,31 @@ WEBSITE DESIGN REQUIREMENTS (for website form):
   • NO Tailwind — write all CSS as custom properties in <style> tags
   • Installation command in a styled terminal block with copy button
 
+FORM ADAPTATION — when the demo form is NOT 'app' or 'website':
+
+  PRESENTATION (reveal.js):
+    • Slide 1: Framework name + tagline + "Install in 30 seconds"
+    • Slide 2: The Problem — code showing the painful old way (before)
+    • Slide 3: The Solution — same task with this framework (after) → dramatic diff
+    • Slide 4: Quick Start — copy-pasteable 10-line example
+    • Slide 5-7: Core Concepts — one concept per slide with code + explanation
+    • Slide 8: Architecture diagram (inline SVG showing framework modules)
+    • Slide 9: Performance benchmarks (comparison table from paper)
+    • Slide 10-11: Real-world examples and use cases
+    • Slide 12: Ecosystem — integrations, community, roadmap
+    • Slide 13: Conclusion + links → Slide 14: Q&A
+
+  SLIDES / LATEX:
+    • Extract code examples and architecture figures from PDF using extract_pdf_page
+    • Show before/after code comparison as side-by-side columns
+    • Include performance benchmark table with ALL baselines from paper
+    • TikZ diagram for framework architecture
+
+FIGURE INTEGRATION (for slides/latex/presentation forms):
+  • Use extract_pdf_page to get architecture diagrams and benchmark figures
+  • Code examples should be typeset (not screenshot images)
+  • Performance tables must be structured data (add_table / tabular), not images
+
 {self._multistep_instructions(demo_form)}
 
 {self._tool_usage_instructions()}
@@ -159,16 +192,20 @@ Follow the execution plan. The result should be Stripe-docs quality.
     def get_polish_prompt(self, paper, analysis, demo_form, demo_type, generated_files):
         spec = FORM_SPECS.get(demo_form, {})
         main_file = spec.get("main_file", "app.py")
-        return f"""QUALITY REVIEW for Framework Tutorial — generated: {', '.join(generated_files[:12])}
+        figures_available = [f for f in generated_files if f.startswith("figures/")]
 
-Step 1 — Read {main_file}:
+        base_checks = f"""QUALITY REVIEW for Framework Tutorial — generated: {', '.join(generated_files[:12])}
+
+Step 1 — Read {main_file} and verify core content:
   • Is there a before/after code comparison showing the framework's value?
   • Does the Quick Start example actually work (< 20 lines, correct imports)?
+  • Is there a performance/benchmark table from the paper (real numbers)?"""
+
+        if demo_form in ("app", "website"):
+            return base_checks + """
+Step 2 — Code quality:
   • Are copy-to-clipboard buttons on all code blocks?
   • Is Prism.js (or highlight.js) used for syntax highlighting?
-
-Step 2 — Content:
-  • Is there a performance/benchmark table from the paper (real numbers)?
   • Are there at least 3 progressively complex examples?
   • Does the FAQ section cover at least 5 common gotchas?
 
@@ -176,5 +213,32 @@ Step 3 — UX:
   • Can a developer copy the Quick Start code and run it in < 60 seconds?
   • Does the nav work and scroll smoothly to each section?
   • Are all code blocks visually distinct from prose?
+
+Rewrite anything that falls short. Target: Stripe / FastAI documentation quality."""
+        elif demo_form == "presentation":
+            return base_checks + """
+Step 2 — Slide-specific:
+  • Is there a dramatic before/after code comparison (2 consecutive slides)?
+  • Are there inline SVG diagrams for the framework architecture?
+  • Does the performance slide have a styled comparison table?
+  • Are code blocks properly syntax-highlighted and readable at slide size?
+  • Do all slides use class="fragment" for bullet reveals?
+
+Step 3 — Content completeness:
+  • Is there a Quick Start slide with copy-pasteable code?
+  • Are there >=14 slides covering the full tutorial arc?
+
+Fix everything. Target: framework launch keynote quality."""
+        elif demo_form in ("slides", "latex"):
+            figs_line = f"  • Pre-extracted figures: {', '.join(figures_available)}\n" if figures_available else ""
+            return base_checks + f"""
+Step 2 — Slide content:
+{figs_line}  • Are extracted figures embedded in relevant slides?
+  • Is there a side-by-side before/after code comparison?
+  • Are benchmark numbers hard-coded as structured tables?
+
+Fix everything. Target: conference tutorial presentation quality."""
+        else:
+            return base_checks + """
 
 Rewrite anything that falls short. Target: Stripe / FastAI documentation quality."""

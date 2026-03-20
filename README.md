@@ -21,8 +21,20 @@
 
 ## Quick Start
 
+**No API key needed** — authenticate with Claude Code or Gemini CLI:
+
 ```bash
 pip install paper-demo-agent
+
+# Option A: Use Claude Pro/Max subscription (free — no API billing)
+claude login                    # one-time: sign into claude.ai
+paper-demo-agent demo 1706.03762
+
+# Option B: Use Gemini CLI (free tier: 60 req/min, 1000 req/day)
+gemini                          # one-time: sign into Google
+paper-demo-agent demo 1706.03762 --provider gemini
+
+# Option C: Traditional API key
 paper-demo-agent key set ANTHROPIC_API_KEY sk-ant-...
 paper-demo-agent demo 1706.03762
 ```
@@ -72,7 +84,7 @@ sudo apt-get install texlive-latex-recommended texlive-fonts-extra
 | 📦 | **10 Output Formats** | Gradio apps, Streamlit dashboards, reveal.js slides, PowerPoint, LaTeX/Beamer, project pages, blog articles, READMEs, Mermaid flowcharts, Graphviz diagrams |
 | 🤖 | **Multi-Phase Agent** | 4-phase pipeline (Research → Build → Polish → Validate) with tool use, prior-work analysis, and self-correction |
 | 🔌 | **6 LLM Providers** | Anthropic, OpenAI, Google Gemini, DeepSeek, Qwen, MiniMax — switch with one flag |
-| 🔑 | **Zero-Config Auth** | Auto-detects keys from Claude Code, OpenAI Codex CLI, Aider, gcloud ADC, and environment variables |
+| 🔑 | **Zero-Config Auth** | Auto-detects credentials from Claude Code (OAuth), Gemini CLI (OAuth), OpenAI Codex CLI, Aider, and gcloud ADC — no API keys needed |
 | 📄 | **Any Input** | arXiv ID, arXiv URL, any URL, local PDF, or raw text |
 | 🌐 | **Web UI** | Dark-themed Gradio interface with real-time progress streaming, phase stepper, file preview, and one-click demo launch |
 | ⚡ | **One Command** | `paper-demo-agent demo 1706.03762` — that's it |
@@ -167,23 +179,28 @@ flowchart LR
 |---|---|---|---|
 | **Anthropic** | `claude-sonnet-4-6` | `ANTHROPIC_API_KEY` | Best quality. Auto-detected from Claude Code |
 | **OpenAI** | `gpt-5.2` | `OPENAI_API_KEY` | Also supports o3, o4-mini. Auto-detected from Codex CLI |
-| **Gemini** | `gemini-2.5-flash` | `GOOGLE_API_KEY` | Also supports gcloud ADC (no key needed) |
+| **Gemini** | `gemini-2.5-flash` | `GOOGLE_API_KEY` | Auto-detected from Gemini CLI or gcloud ADC |
 | **DeepSeek** | `deepseek-chat` | `DEEPSEEK_API_KEY` | Also supports deepseek-reasoner |
 | **Qwen** | `qwen-max` | `QWEN_API_KEY` | Also supports qwen-plus, qwen-turbo |
 | **MiniMax** | `abab6.5-chat` | `MINIMAX_API_KEY` | Also requires `MINIMAX_GROUP_ID` |
 
 ### Zero-Config Authentication
 
-Paper Demo Agent automatically detects API keys from tools you already use:
+Paper Demo Agent automatically detects credentials from CLI tools you already use — **no API keys needed**:
 
-| Tool | Config Path | Provides |
-|---|---|---|
-| **Claude Code** | `~/.claude/.credentials.json` | `ANTHROPIC_API_KEY` |
-| **OpenAI Codex CLI** | `~/.codex/auth.json` | `OPENAI_API_KEY` |
-| **Aider** | `~/.aider.conf.yml` | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` |
-| **gcloud ADC** | `~/.config/gcloud/application_default_credentials.json` | Gemini auth |
+| Tool | Auth Method | Provides | Setup |
+|---|---|---|---|
+| **Claude Code** | OAuth (macOS Keychain / `~/.claude/`) | `ANTHROPIC_API_KEY` | `claude login` — uses your Pro/Max subscription |
+| **Gemini CLI** | OAuth (Google Cloud Code Assist) | `GOOGLE_API_KEY` | `gemini` — free tier: 60 req/min, 1000 req/day |
+| **OpenAI Codex CLI** | `~/.codex/auth.json` | `OPENAI_API_KEY` | Auto-detected |
+| **Aider** | `~/.aider.conf.yml` | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | Auto-detected |
+| **gcloud ADC** | Application Default Credentials | Gemini auth | `gcloud auth application-default login` |
+
+**Priority order:** Claude Code / Gemini CLI → saved config → environment variables → Codex / Aider.
 
 If you use any of these tools, Paper Demo Agent works immediately — no key setup required.
+
+> **💡 Recommended:** Install [Claude Code](https://github.com/anthropics/claude-code) (`npm i -g @anthropic-ai/claude-code && claude login`) or [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`npm i -g @google/gemini-cli && gemini`) for the fastest zero-config experience.
 
 ---
 

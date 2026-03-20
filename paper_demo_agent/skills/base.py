@@ -656,6 +656,35 @@ Target: Publication-quality ML architecture diagrams."""
         }
         return guidance.get(demo_type, f"━━ DEMO TYPE: {demo_type.upper()} ━━")
 
+    def _figure_integration_note(self, demo_form: str) -> str:
+        """Return figure extraction guidance for forms that embed visual content."""
+        if demo_form in ("slides", "latex"):
+            return """━━ FIGURE & TABLE INTEGRATION (MANDATORY for slides/latex) ━━
+  BEFORE writing any slides, extract key figures from the paper PDF:
+  1. extract_pdf_page(page=N) for architecture diagrams, result charts, example figures
+  2. Use full-page PNGs directly — only crop if a figure occupies a small region
+  3. Embed with add_picture (pptx) or \\includegraphics (LaTeX)
+  4. ALWAYS reproduce tables as structured data (add_table / tabular) — NEVER embed table images
+  5. Use \\figcap{} for LaTeX captions (NOT \\caption* in frames)
+"""
+        elif demo_form == "presentation":
+            return """━━ FIGURE & TABLE INTEGRATION (recommended for presentations) ━━
+  Consider extracting key figures from the paper PDF as reference:
+  1. extract_pdf_page(page=N) for architecture diagrams, key result figures
+  2. Use extracted images as REFERENCE to create inline SVG diagrams (don't embed the PNG)
+  3. Reproduce all data tables as styled HTML <table> elements
+  4. Create inline SVG charts for visual comparisons
+"""
+        elif demo_form in ("page_readme",):
+            return """━━ FIGURE INTEGRATION (recommended for README) ━━
+  Extract key figures from the paper PDF:
+  1. extract_pdf_page(page=1) for teaser/overview figure
+  2. extract_pdf_page for architecture diagram and key results
+  3. Embed with <p align="center"><img src="figures/..." width="80%"></p>
+  4. Add italicized captions below each figure
+"""
+        return ""
+
     def _multistep_instructions(self, demo_form: str) -> str:
         """Numbered phase instructions injected into every skill system prompt."""
         steps = {
@@ -680,6 +709,12 @@ Step 3 ── REQUIREMENTS + README
 
             "presentation": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
 
+Step 0 ── EXTRACT FIGURES (optional but recommended)
+  • If the paper has key architecture diagrams, result charts, or example figures:
+    extract_pdf_page(page=N) for 2-4 key pages. Use extracted PNGs as reference
+    when creating your own inline SVG diagrams (trace the structure, don't embed the PNG).
+  • For result tables: READ the numbers from the paper and hard-code them in HTML tables.
+
 Step 1 ── PLAN
   • Plan every slide: title + 1-line content description
   • Sequence: Title → Motivation → Background → Method(x3) → Results(x2) → Demo → Comparison → Limits → Conclusion → Q&A
@@ -697,6 +732,12 @@ Step 3 ── DONE
   • Do NOT read_file to verify. Do NOT web_search for CDN URLs. Polish phase handles review.""",
 
             "website": """━━ EXECUTION PLAN (follow in order, do not skip steps) ━━
+
+Step 0 ── RESEARCH & EXTRACT (do this first)
+  • web_search for the paper's arXiv URL — use it in hero buttons and citation
+  • If the paper has a striking teaser or architecture figure:
+    extract_pdf_page(page=N) to reference when creating your own SVG diagrams
+  • Parse key numeric results from the paper text for the results section
 
 Step 1 ── PLAN
   • Plan all sections: Hero, Abstract, Method, Results, Citation
@@ -890,6 +931,42 @@ Step 4 ── REQUIREMENTS + DONE
   NEVER:  Search for reveal.js/Mermaid/KaTeX CDN URLs — they are already provided above.
           Write placeholder code; skip requirements.txt; leave TODO items unfilled.
           Use subprocess to run scripts — always use execute_python directly.
+
+━━ ERROR RECOVERY PATTERNS ━━
+
+  write_file FAILS (content too large):
+    → Split the file into logical parts. For HTML: write a base file with <script src="data.js">,
+      then write data.js separately. For Python: extract data constants into a data.py module.
+    → For extremely large HTML files (>50KB): move inline CSS to style.css, inline JS to script.js,
+      and large data arrays to data.js — then write_file each separately.
+    → NEVER truncate content to fit — split intelligently instead.
+
+  web_search RETURNS NOTHING USEFUL:
+    → Try alternative queries: use the paper's full title, then first author + year,
+      then key method name + "arxiv" or "github".
+    → If still nothing: proceed WITHOUT the info. Use data from the paper PDF itself.
+      Mark any missing links with '#' and a visible comment like "[arXiv link pending]".
+    → NEVER invent URLs or DOIs — use '#' placeholder and note it clearly.
+
+  CDN LINK FAILS (404, timeout, CORS error):
+    → All CDN links in this prompt are pre-vetted. If one fails at runtime:
+      1. Try the EXACT same URL (typos are the #1 cause).
+      2. For unpkg.com: try cdn.jsdelivr.net equivalent (and vice versa).
+      3. NEVER switch to a different library version — the patterns above are version-specific.
+    → For Font Awesome: if CDN is blocked, use inline SVG icons as a last resort.
+
+  extract_pdf_page FAILS or returns blank:
+    → The page number may be wrong (PDF page != printed page). Try page±1.
+    → If the PDF is encrypted or corrupted: skip figure extraction for that page,
+      describe the figure in text instead, and note "[Figure could not be extracted]".
+    → NEVER call extract_pdf_page in a loop over all pages — target specific pages only.
+
+  execute_python FAILS:
+    → Read the error traceback carefully. Common causes:
+      - Missing import → add install_package call first
+      - File not found → check path is relative to output dir
+      - Syntax error → fix the specific line, don't rewrite the whole file
+    → After fixing, re-run ONLY the failing script — don't re-run everything.
 
 ━━ EFFICIENCY RULES (save iterations & tokens) ━━
   • Do NOT verify output during build — the Polish phase handles quality review.

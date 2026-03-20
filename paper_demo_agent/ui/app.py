@@ -978,6 +978,60 @@ def _header_html() -> str:
 # Provider helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _provider_has_credentials(provider: str) -> tuple[bool, Optional[str]]:
+    """Check if a provider has usable credentials. Returns (has_creds, source)."""
+    info = PROVIDER_DEFAULTS.get(provider, {})
+    key_env = info.get("key_env", "")
+    val, source = key_manager.get_with_source(key_env)
+    if val:
+        return True, source
+    # Gemini can also use ADC
+    if provider == "gemini" and key_manager.detect_gemini_adc():
+        return True, "gcloud ADC"
+    return False, None
+
+
+def _provider_choices_with_status() -> list[str]:
+    """Return provider names with ✓/✗ prefix showing auth status."""
+    choices = []
+    for name in list_providers():
+        has_creds, source = _provider_has_credentials(name)
+        if has_creds:
+            choices.append(f"✓ {name}")
+        else:
+            choices.append(f"✗ {name}")
+    return choices
+
+
+def _clean_provider_name(display_name: str) -> str:
+    """Strip status prefix from provider display name."""
+    return display_name.lstrip("✓✗ ").strip()
+
+
+def _provider_status_hint(provider_display: str) -> str:
+    """Return an HTML hint about the provider's auth status."""
+    provider = _clean_provider_name(provider_display)
+    has_creds, source = _provider_has_credentials(provider)
+
+    if has_creds:
+        source_labels = {
+            "claude-code": "Claude Code OAuth",
+            "gemini-cli": "Gemini CLI OAuth",
+            "saved": "saved API key",
+            "env": "environment variable",
+            "gcloud ADC": "Google Cloud ADC",
+            "codex": "OpenAI Codex",
+            "aider": "Aider config",
+        }
+        label = source_labels.get(source, source)
+        return (f'<p style="font-size:11px;color:#86efac;margin:2px 0 0">'
+                f'✓ Authenticated via <strong>{label}</strong></p>')
+    else:
+        return (f'<p style="font-size:11px;color:#fca5a5;margin:2px 0 0">'
+                f'✗ No credentials for <strong>{provider}</strong> — '
+                f'set an API key above or configure in Settings tab</p>')
+
+
 def _default_models() -> list[str]:
     first = list(PROVIDER_DEFAULTS.values())[0]
     return first.get("models", ["claude-opus-4-6"])
@@ -1086,6 +1140,8 @@ def _key_status_html() -> str:
                         f'border:1px solid rgba(251,191,36,0.2);{_b}">gcloud ADC</span>'),
         "claude-code": (f'<span style="background:rgba(251,146,60,0.12);color:#fdba74;'
                         f'border:1px solid rgba(251,146,60,0.2);{_b}">Claude Code</span>'),
+        "gemini-cli":  (f'<span style="background:rgba(66,133,244,0.12);color:#93c5fd;'
+                        f'border:1px solid rgba(66,133,244,0.2);{_b}">Gemini CLI</span>'),
         "codex":       (f'<span style="background:rgba(16,185,129,0.12);color:#6ee7b7;'
                         f'border:1px solid rgba(16,185,129,0.2);{_b}">OpenAI Codex</span>'),
         "aider":       (f'<span style="background:rgba(168,85,247,0.12);color:#d8b4fe;'
@@ -1116,12 +1172,25 @@ def _tool_detect_html() -> str:
     """Show which third-party AI tools were found and what credentials they provide."""
     rows = []
 
-    # Claude Code → ANTHROPIC_API_KEY
+    # Claude Code → ANTHROPIC_API_KEY (Keychain or file)
     token = key_manager.detect_claude_code()
-    if token:
-        rows.append(("Claude Code", "~/.claude/.credentials.json", "ANTHROPIC_API_KEY", "••••••••", True))
+    # Detect which source was used
+    keychain_token = key_manager._detect_claude_code_keychain()
+    if keychain_token:
+        cc_path = "macOS Keychain"
     else:
-        rows.append(("Claude Code", "~/.claude/.credentials.json", "ANTHROPIC_API_KEY", None, False))
+        cc_path = "~/.claude/.credentials.json"
+    if token:
+        rows.append(("Claude Code", cc_path, "ANTHROPIC_API_KEY", "••••••••", True))
+    else:
+        rows.append(("Claude Code", "not installed", "ANTHROPIC_API_KEY", None, False))
+
+    # Gemini CLI → GOOGLE_API_KEY
+    gc_token = key_manager.detect_gemini_cli()
+    if gc_token:
+        rows.append(("Gemini CLI", "Cloud Code Assist OAuth", "GOOGLE_API_KEY", "••••••••", True))
+    else:
+        rows.append(("Gemini CLI", "not installed", "GOOGLE_API_KEY", None, False))
 
     # OpenAI Codex → OPENAI_API_KEY
     key = key_manager.detect_openai_codex()
@@ -1158,6 +1227,66 @@ def _tool_detect_html() -> str:
             f'</div>'
         )
     return f'<div style="padding:4px 0">{"".join(parts)}</div>'
+
+
+def _claude_code_status_html() -> str:
+    """Build an HTML snippet showing Claude Code auth status."""
+    token = key_manager.detect_claude_code()
+    keychain_token = key_manager._detect_claude_code_keychain()
+
+    if token:
+        source = "macOS Keychain" if keychain_token else "~/.claude/.credentials.json"
+        is_oauth = token.startswith("sk-ant-oat01-")
+        token_type = "OAuth token" if is_oauth else "API key"
+        badge = (f'<span style="background:rgba(34,197,94,0.12);color:#86efac;'
+                 f'border:1px solid rgba(34,197,94,0.2);border-radius:10px;'
+                 f'font-size:11px;padding:2px 9px;font-weight:500">✓ Authenticated</span>')
+        msg = (f'Claude Code {token_type} found in <code>{source}</code>. '
+               f'Anthropic provider will use this automatically — no API key needed.')
+    else:
+        badge = ('<span style="background:rgba(239,68,68,0.1);color:#fca5a5;'
+                 'border:1px solid rgba(239,68,68,0.2);border-radius:10px;'
+                 'font-size:11px;padding:2px 9px;font-weight:500">not configured</span>')
+        msg = 'Claude Code not detected. Install and run <code>claude login</code> — see instructions below.'
+
+    return (
+        f'<div style="display:flex;align-items:center;gap:10px;padding:8px 0;'
+        f'font-size:12px;color:var(--pda-text2)">'
+        f'{badge}'
+        f'<span>{msg}</span>'
+        f'</div>'
+    )
+
+
+def _gemini_cli_status_html() -> str:
+    """Build an HTML snippet showing Gemini CLI auth status."""
+    token = key_manager.detect_gemini_cli()
+
+    if token:
+        import json as _json
+        try:
+            data = _json.loads(token)
+            project_id = data.get("projectId", "unknown")
+        except Exception:
+            project_id = "unknown"
+        badge = (f'<span style="background:rgba(34,197,94,0.12);color:#86efac;'
+                 f'border:1px solid rgba(34,197,94,0.2);border-radius:10px;'
+                 f'font-size:11px;padding:2px 9px;font-weight:500">✓ Authenticated</span>')
+        msg = (f'Gemini CLI token found. Project: <code>{project_id[:20]}</code>. '
+               f'Gemini provider will use this automatically.')
+    else:
+        badge = ('<span style="background:rgba(71,85,105,0.3);color:var(--pda-text3);'
+                 'border:1px solid var(--pda-border);border-radius:10px;'
+                 'font-size:11px;padding:2px 9px;font-weight:500">not detected</span>')
+        msg = 'Install Gemini CLI and run <code>gemini</code> to authenticate.'
+
+    return (
+        f'<div style="display:flex;align-items:center;gap:10px;padding:6px 0;'
+        f'font-size:12px;color:var(--pda-text2)">'
+        f'{badge}'
+        f'<span>{msg}</span>'
+        f'</div>'
+    )
 
 
 def _adc_status_html() -> str:
@@ -1309,6 +1438,9 @@ def _run_generate(
                        files_html, result)
 
     # ── Input validation ─────────────────────────────────────────
+    # Clean provider name (strip ✓/✗ prefix from UI display)
+    provider = _clean_provider_name(provider)
+
     actual_source = None
     if pdf_file:
         actual_source = pdf_file if isinstance(pdf_file, str) else pdf_file.name
@@ -1484,9 +1616,14 @@ def build_ui() -> gr.Blocks:
 
                         gr.Markdown("### LLM Provider")
                         with gr.Row():
+                            _prov_choices = _provider_choices_with_status()
+                            _prov_default = next(
+                                (c for c in _prov_choices if "anthropic" in c),
+                                _prov_choices[0] if _prov_choices else "anthropic",
+                            )
                             provider_dd = gr.Dropdown(
-                                choices=list_providers(),
-                                value="anthropic",
+                                choices=_prov_choices,
+                                value=_prov_default,
                                 label="Provider",
                                 scale=1,
                             )
@@ -1503,6 +1640,7 @@ def build_ui() -> gr.Blocks:
                                 type="password",
                                 scale=2,
                             )
+                        provider_status_html = gr.HTML(_provider_status_hint("anthropic"))
 
                         gr.Markdown("### Output")
                         output_kind_dd = gr.Dropdown(
@@ -1672,12 +1810,66 @@ def build_ui() -> gr.Blocks:
             with gr.TabItem("⚙ Settings & Keys"):
                 gr.HTML("""
 <div style="max-width:700px">
-  <h3 style="font-size:16px;font-weight:600;color:var(--pda-text);margin:0 0 4px">Credentials</h3>
-  <p style="font-size:13px;color:var(--pda-text2);margin:0 0 20px">
-    Keys are saved to <code>~/.paper-demo-agent/config.json</code> and never sent
-    anywhere except the chosen LLM provider. Environment variables are detected automatically.
+  <h3 style="font-size:16px;font-weight:600;color:var(--pda-text);margin:0 0 4px">Authentication</h3>
+  <p style="font-size:13px;color:var(--pda-text2);margin:0 0 12px">
+    Use your existing CLI tools to authenticate — <strong>no API keys needed</strong>.
+    Or set keys manually below.
   </p>
 </div>""")
+
+                # ── Quick Auth: Claude Code + Gemini CLI (prominent!) ────────
+                with gr.Row(equal_height=True):
+                    with gr.Column(scale=1, min_width=320):
+                        gr.HTML("""
+<div style="background:linear-gradient(135deg, rgba(99,102,241,0.08), rgba(99,102,241,0.02));
+            border:1.5px solid rgba(99,102,241,0.25);border-radius:12px;padding:20px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <span style="font-size:22px">🟣</span>
+    <span style="font-size:15px;font-weight:700;color:var(--pda-text)">Claude Code</span>
+    <span style="font-size:10px;background:rgba(99,102,241,0.15);color:#a5b4fc;
+                 border:1px solid rgba(99,102,241,0.3);border-radius:10px;padding:1px 8px;
+                 font-weight:500">FREE with Pro/Max</span>
+  </div>
+  <p style="font-size:12px;color:var(--pda-text2);margin:0 0 12px;line-height:1.5">
+    Use your Claude Pro or Max subscription. No API billing.
+  </p>
+  <div style="background:var(--pda-bg);border-radius:6px;padding:10px 12px;margin-bottom:8px">
+    <code style="font-size:11px;color:var(--pda-text3);display:block">$ npm install -g @anthropic-ai/claude-code</code>
+    <code style="font-size:13px;color:#86efac;font-weight:600;display:block;margin-top:4px">$ claude login</code>
+  </div>
+  <p style="font-size:10px;color:var(--pda-text3);margin:0;line-height:1.4">
+    Opens browser → sign into claude.ai → auto-detected.
+  </p>
+</div>""")
+                        cc_status = gr.HTML(_claude_code_status_html())
+                        check_cc_btn = gr.Button("↻ Refresh", variant="secondary", size="sm")
+
+                    with gr.Column(scale=1, min_width=320):
+                        gr.HTML("""
+<div style="background:linear-gradient(135deg, rgba(66,133,244,0.08), rgba(66,133,244,0.02));
+            border:1.5px solid rgba(66,133,244,0.25);border-radius:12px;padding:20px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+    <span style="font-size:22px">🔵</span>
+    <span style="font-size:15px;font-weight:700;color:var(--pda-text)">Gemini CLI</span>
+    <span style="font-size:10px;background:rgba(66,133,244,0.12);color:#93c5fd;
+                 border:1px solid rgba(66,133,244,0.25);border-radius:10px;padding:1px 8px;
+                 font-weight:500">FREE tier available</span>
+  </div>
+  <p style="font-size:12px;color:var(--pda-text2);margin:0 0 12px;line-height:1.5">
+    Use Google's Gemini models. Free: 60 req/min, 1000 req/day.
+  </p>
+  <div style="background:var(--pda-bg);border-radius:6px;padding:10px 12px;margin-bottom:8px">
+    <code style="font-size:11px;color:var(--pda-text3);display:block">$ npm install -g @google/gemini-cli</code>
+    <code style="font-size:13px;color:#93c5fd;font-weight:600;display:block;margin-top:4px">$ gemini</code>
+  </div>
+  <p style="font-size:10px;color:var(--pda-text3);margin:0;line-height:1.4">
+    Opens browser → sign into Google → auto-detected.
+  </p>
+</div>""")
+                        gc_status = gr.HTML(_gemini_cli_status_html())
+                        check_gc_btn = gr.Button("↻ Refresh", variant="secondary", size="sm")
+
+                gr.HTML('<div style="height:1px;background:var(--pda-border);margin:20px 0 16px"></div>')
 
                 key_status_display = gr.HTML(_key_status_html())
 
@@ -1687,10 +1879,10 @@ def build_ui() -> gr.Blocks:
                 gr.HTML("""
 <div style="max-width:700px;margin-bottom:10px">
   <h4 style="font-size:14px;font-weight:600;color:var(--pda-text);margin:0 0 6px">
-    API Keys
+    Manual API Keys
   </h4>
   <p style="font-size:12px;color:var(--pda-text2);margin:0 0 4px;line-height:1.6">
-    Get keys from your provider's dashboard:
+    Or set keys directly from your provider's dashboard:
     <a href="https://console.anthropic.com" target="_blank"
        style="color:var(--pda-accent);text-decoration:none">Anthropic</a> ·
     <a href="https://platform.openai.com/api-keys" target="_blank"
@@ -1890,11 +2082,17 @@ paper-demo-agent providers
                 outputs=source_input,
             )
 
-        # Provider → model update
+        # Provider → model update + status hint
+        def _on_provider_change(provider_display):
+            provider = _clean_provider_name(provider_display)
+            models = _get_models_for_provider(provider)
+            hint = _provider_status_hint(provider)
+            return models, hint
+
         provider_dd.change(
-            fn=_get_models_for_provider,
+            fn=_on_provider_change,
             inputs=provider_dd,
-            outputs=model_dd,
+            outputs=[model_dd, provider_status_html],
         )
 
         # Output kind → show/hide sub-rows + update info text
@@ -2083,6 +2281,20 @@ paper-demo-agent providers
             fn=lambda: (_tool_detect_html(), _key_status_html()),
             inputs=None,
             outputs=[tool_detect_display, key_status_display],
+        )
+
+        # Claude Code status refresh
+        check_cc_btn.click(
+            fn=lambda: (_claude_code_status_html(), _tool_detect_html(), _key_status_html()),
+            inputs=None,
+            outputs=[cc_status, tool_detect_display, key_status_display],
+        )
+
+        # Gemini CLI status refresh
+        check_gc_btn.click(
+            fn=lambda: (_gemini_cli_status_html(), _tool_detect_html(), _key_status_html()),
+            inputs=None,
+            outputs=[gc_status, tool_detect_display, key_status_display],
         )
 
         # HuggingFace login/logout

@@ -30,6 +30,7 @@ MANIFEST
 .venv
 env/
 venv/
+envs/
 ENV/
 env.bak/
 venv.bak/

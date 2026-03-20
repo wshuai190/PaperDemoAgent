@@ -4,6 +4,60 @@ from paper_demo_agent.paper.models import Paper, PaperAnalysis
 from paper_demo_agent.skills.base import BaseSkill, FORM_SPECS
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Pre-baked knowledge — domain-specific Q&A patterns
+# ─────────────────────────────────────────────────────────────────────────────
+
+_QA_KNOWLEDGE = """
+━━ PAPER Q&A KNOWLEDGE PATTERNS (use verbatim, do NOT search) ━━
+
+PAPER COMPREHENSION TAXONOMY — use this to generate thorough suggested questions:
+  WHAT questions:  "What is the main contribution?", "What problem does it solve?"
+  HOW questions:   "How does the method work?", "How is it evaluated?"
+  WHY questions:   "Why is this approach better?", "Why were these baselines chosen?"
+  COMPARE questions: "How does this compare to [prior work]?", "What's the key difference from [X]?"
+  CRITIQUE questions: "What are the limitations?", "What assumptions might not hold?"
+  APPLY questions: "How could I use this in my own project?", "What are real-world applications?"
+  EXTEND questions: "What future work do the authors suggest?", "What would you change about this approach?"
+
+ANSWER QUALITY PATTERNS:
+  • Always cite specific sections: "As described in Section 3.2, the encoder uses..."
+  • Include specific numbers: "The model achieves 94.2% accuracy, which is 2.1pp above the prior SOTA"
+  • Use analogies for complex concepts: "Think of attention like a spotlight that..."
+  • Structure long answers: use bullet points, numbered steps, or sub-headings
+  • When critiquing: be balanced — acknowledge strengths before pointing out limitations
+
+CONCEPT MAP GENERATION:
+  ```python
+  # Extract key terms and build a concept map from paper sections
+  CONCEPTS = {
+      "Term A": {
+          "definition": "One-sentence definition from the paper.",
+          "section": "Section 3.1",
+          "related": ["Term B", "Term C"],
+          "importance": "high"  # high/medium/low
+      },
+      # ... extract 10-20 key concepts from the paper
+  }
+  ```
+
+STRUCTURED SUMMARY TEMPLATE:
+  ```python
+  PAPER_SUMMARY = {
+      "tldr": "One-sentence summary of the contribution.",
+      "problem": "What problem does this paper address? (2-3 sentences)",
+      "approach": "How does the method work? (3-5 sentences, plain English)",
+      "key_results": [
+          {"metric": "Accuracy", "value": "94.2%", "comparison": "+2.1pp vs prior SOTA"},
+          {"metric": "Speed", "value": "3x faster", "comparison": "vs baseline"},
+      ],
+      "limitations": ["Limitation 1", "Limitation 2"],
+      "future_work": ["Direction 1", "Direction 2"],
+  }
+  ```
+"""
+
+
 class GeneralQASkill(BaseSkill):
     name = "GeneralQASkill"
     description = "Generic paper → LLM-powered Q&A or explainer demo"
@@ -14,6 +68,9 @@ class GeneralQASkill(BaseSkill):
         paper_text += "Key Sections:\n"
         for section_name, section_text in list(paper.sections.items())[:5]:
             paper_text += f"\n## {section_name}\n{section_text[:800]}\n"
+
+        # Form-specific guidance for non-app forms
+        form_specific = self._form_specific_guidance(demo_form)
 
         return f"""You are an expert at building intelligent paper exploration tools —
 combining the depth of a research assistant with the UX of Perplexity AI.
@@ -28,10 +85,20 @@ PAPER CONTEXT:
 
 ━━ SKILL CONTEXT — General Q&A Paper Demo ━━
 
+RESEARCH PHASE — search for these BEFORE writing any code:
+  1. web_search("{paper.title} arxiv") → get arXiv URL for citation links
+  2. web_search("{paper.title} github code") → find official code repository
+  3. web_search("first_author_lastname {paper.title[:30]} results") → cross-verify key numbers
+  These searches help you embed accurate metadata and links in the demo.
+
 PAPER CONTENT TO EMBED IN THE DEMO:
 ```
 {paper_text[:3500]}
 ```
+
+{_QA_KNOWLEDGE}
+
+{form_specific}
 
 ARCHITECTURE: The app embeds the paper as context and answers questions via an LLM API.
 
@@ -171,21 +238,97 @@ API KEY ONBOARDING (show this if no key found):
 {self._tool_usage_instructions()}
 """
 
+    def _form_specific_guidance(self, demo_form: str) -> str:
+        """Return guidance for adapting Q&A content to non-app forms."""
+        if demo_form == "presentation":
+            return """FORM ADAPTATION — PRESENTATION (reveal.js):
+  Since this is a presentation, NOT a chat app, adapt the Q&A concept into slides:
+  • Slide 1: Title + paper metadata
+  • Slide 2: "What This Paper Does" (TL;DR)
+  • Slides 3-5: "Key Questions Answered" — pick the 3 most insightful Q&A pairs
+    and present each as: Question (large heading) → Answer (bullets with fragments)
+  • Slide 6-7: Concept map as an inline SVG diagram showing term relationships
+  • Slide 8-9: Results summary with key numbers in stat cards
+  • Slide 10: "Critical Analysis" — limitations and open questions
+  • Slide 11-12: FAQ-style slides addressing common reader questions
+  • Slide 13: Conclusion + BibTeX
+  • Slide 14: Q&A slide
+  Think of it as "the 10 things you need to know about this paper" in slide form."""
+        elif demo_form == "website":
+            return """FORM ADAPTATION — WEBSITE (static HTML):
+  Build an interactive paper exploration page (NOT a chat interface):
+  • Hero: paper title, authors, venue, arXiv link buttons
+  • Section 1: TL;DR card with key contribution
+  • Section 2: Interactive concept map — clickable terms expand definitions
+  • Section 3: "Key Questions" — accordion/expandable Q&A pairs (8+ questions)
+    Each answer pre-written in the HTML, revealed on click with smooth animation
+  • Section 4: Structured summary — Problem | Approach | Results | Limitations
+  • Section 5: Results dashboard — key metrics in stat cards, comparison table
+  • Section 6: BibTeX + citation copy button
+  Use IntersectionObserver for scroll animations, dark mode toggle in nav."""
+        elif demo_form == "page_blog":
+            return """FORM ADAPTATION — BLOG (Distill.pub):
+  Structure the blog as a guided paper walkthrough:
+  • Hook: Start with the key question the paper answers
+  • Use d-aside for technical term definitions (like a built-in glossary)
+  • Structure around the paper's core questions: What? Why? How? So What?
+  • Embed a D3.js interactive chart for the main results
+  • Use d-footnote for methodological details"""
+        elif demo_form in ("slides", "latex"):
+            return """FORM ADAPTATION — SLIDES:
+  Since this is a slide deck, present the paper as a structured summary:
+  • Title slide with paper metadata
+  • "What & Why" slides: problem statement and motivation
+  • "How" slides: method overview with key equations/diagrams
+  • "Results" slides: hard-coded comparison tables and charts
+  • "So What" slide: implications and takeaways
+  • Q&A slide
+  Extract and embed figures from the PDF using extract_pdf_page."""
+        return ""
+
     def get_initial_message(self, paper: Paper, analysis: PaperAnalysis, demo_form: str, demo_type: str) -> str:
+        # Adapt priority order based on form
+        if demo_form == "app":
+            priorities = """PRIORITY ORDER:
+1. web_search for the paper's arXiv URL and official code repository
+2. Embed the paper abstract and key sections as the LLM's system prompt
+3. Build a Gradio ChatInterface with streaming responses
+4. Add 8 pre-written suggested questions covering all angles (WHAT/HOW/WHY/COMPARE/CRITIQUE/APPLY/EXTEND)
+5. Add 5 answer modes: Normal, Deep Dive, ELI5, Critique, Practical
+6. Pre-generate a structured summary tab (TL;DR, problem, approach, results, limitations)
+7. Build a concept map tab with 10-20 key terms and relationships
+8. Handle both Anthropic and OpenAI API keys gracefully"""
+        elif demo_form == "presentation":
+            priorities = """PRIORITY ORDER:
+1. web_search for the paper's arXiv URL and key results
+2. Plan 14 slides: Title → TL;DR → Key Questions (3 slides) → Concept Map → Results → Critical Analysis → FAQ → Conclusion → Q&A
+3. Write demo.html with reveal.js, SVG diagrams, and pre-written Q&A content
+4. Use inline SVG for concept relationship diagram
+5. Include real numbers from the paper in results slides"""
+        elif demo_form == "website":
+            priorities = """PRIORITY ORDER:
+1. web_search for the paper's arXiv URL and official repository
+2. Build an interactive paper exploration page with expandable Q&A sections
+3. Create a clickable concept map using SVG or CSS grid
+4. Pre-write 8+ Q&A pairs covering all angles of the paper
+5. Add structured summary section with stat cards for key results
+6. Implement dark mode toggle and scroll animations"""
+        else:
+            priorities = f"""PRIORITY ORDER:
+1. web_search for the paper's arXiv URL and key metadata
+2. Adapt the Q&A content for {demo_form} format (see form adaptation guidance)
+3. Include pre-written answers to the most important questions about this paper
+4. Ensure all key results from the paper are accurately presented"""
+
         return f"""Build a {demo_form} Q&A demo for: "{paper.title}"
 
 Contribution: {analysis.contribution}
 Demo type: {demo_type}
 
-PRIORITY ORDER:
-1. Embed the paper abstract and key sections as the LLM's system prompt
-2. Build a Gradio ChatInterface with streaming responses
-3. Add 8 pre-written suggested questions covering all angles
-4. Add 4 answer modes: Normal, Deep Dive, ELI5, Critique
-5. Add a pre-generated paper summary tab (TL;DR, method, results)
-6. Handle both Anthropic and OpenAI API keys gracefully
+{priorities}
 
-The UI should feel like Perplexity AI meets a research assistant.
+The result should make this paper genuinely accessible — a reader should understand
+the key contribution, method, and results without reading the full paper.
 Follow the execution plan step by step.
 """
 
