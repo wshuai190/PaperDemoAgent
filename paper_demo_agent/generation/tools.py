@@ -28,8 +28,7 @@ TOOLS: List[Dict] = [
         "name": "write_file",
         "description": (
             "Write content to a file in the output directory. Paths are relative to the output directory. "
-            "Limit: 400 lines for split files (CSS/JS), 800 lines for main files (demo.html, index.html). "
-            "For presentations: write demo.html with first slides, then use append_file to add more slides."
+            "For very large outputs (>500 lines), consider splitting into separate files or using append_file."
         ),
         "parameters": {
             "type": "object",
@@ -359,39 +358,22 @@ def _safe_path(output_dir: str, relative_path: str) -> Path:
     return target
 
 
-_WRITE_FILE_MAX_LINES = 300
-_WRITE_FILE_HARD_MAX = 800  # absolute max for single-file forms
-_WRITE_FILE_SPLIT_MAX = 400  # max for files that should be split (CSS, JS, etc.)
-
-# Files allowed to be larger (main output files)
-_SINGLE_FILE_MAIN = {
-    "demo.html", "presentation.tex", "main.tex", "index.html",
-    "app.py", "build.py", "main.py",  # Python apps/scripts can be large
-}
+_WRITE_FILE_MAX_LINES = 300  # soft threshold for warnings only
 
 
 def tool_write_file(output_dir: str, path: str, content: str) -> str:
     line_count = content.count("\n") + 1
     filename = Path(path).name
 
-    is_main = filename in _SINGLE_FILE_MAIN
-    max_allowed = _WRITE_FILE_HARD_MAX if is_main else _WRITE_FILE_SPLIT_MAX
-
-    if line_count > max_allowed:
-        return (
-            f"ERROR: File too large ({line_count} lines, max {max_allowed}). "
-            + (f"Write in multiple calls: first write the skeleton, then use read_file + write_file to append more content."
-               if is_main else
-               f"Split into separate files (CSS, JS, HTML).")
-        )
-    # Write the file
+    # No hard limit — just write the file. The real safeguard is max_tokens
+    # in the API call (8192 early iterations, 16384 later). If the model
+    # tries to write too much, the API response gets truncated and the
+    # tool call fails with "Missing required argument: content" — which is
+    # caught and retried with a split strategy hint.
     target = _safe_path(output_dir, path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
-    msg = f"Written {len(content)} bytes to {path}"
-    if line_count > _WRITE_FILE_MAX_LINES:
-        msg += f" (NOTE: {line_count} lines — large but accepted for main file)"
-    return msg
+    return f"Written {len(content)} bytes to {path} ({line_count} lines)"
 
 
 def tool_read_file(output_dir: str, path: str) -> str:

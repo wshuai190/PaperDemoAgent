@@ -974,29 +974,21 @@ _LARGE_FILE_FORMS = frozenset([
 ])
 
 _SKELETON_FIRST_MESSAGE_SPLIT = (
-    "CRITICAL — FILE SIZE LIMIT: NEVER write a file longer than 300 lines in a single write_file call.\n"
-    "For this output form, you MUST split into separate files and write them in this order:\n"
-    "  1. styles.css  — ALL CSS rules (write this first)\n"
-    "  2. script.js   — ALL JavaScript (write this second)\n"
-    "  3. Main file (index.html) — HTML skeleton only, referencing styles.css + script.js\n"
-    "     Use <link rel='stylesheet' href='styles.css'> and <script src='script.js'></script>\n"
-    "  4. Overwrite individual sections of the main file if more content is needed\n"
-    "If you attempt to write a 500+ line file in one shot it WILL be truncated and fail. Split first."
+    "For this output, organize your files cleanly:\n"
+    "  1. styles.css  — all CSS\n"
+    "  2. script.js   — all JavaScript\n"
+    "  3. index.html  — references styles.css + script.js via <link> and <script> tags\n"
+    "Write the MAIN file (index.html) FIRST, even as a skeleton, then add supporting files.\n"
+    "This ensures the demo is always in a working state."
 )
 
 _SKELETON_FIRST_MESSAGE_SINGLE = (
-    "CRITICAL — For this presentation, write demo.html as a SINGLE self-contained file.\n"
+    "For this presentation, write demo.html as a SINGLE self-contained file.\n"
     "Do NOT create separate styles.css or script.js — reveal.js requires inline <style> and <script>.\n"
     "Do NOT create slides_part2.html or slide_parts/ — ALL slides go in ONE demo.html file.\n\n"
-    "STRATEGY for building demo.html incrementally:\n"
-    "  1. write_file('demo.html', ...) — HTML head + <style> + first 7-8 slides (~400-600 lines)\n"
-    "  2. append_file('demo.html', ...) — remaining slides + closing tags\n"
-    "     (append_file adds content to the END of the file — no need to re-read it)\n"
-    "  3. If needed, append_file again for more slides\n\n"
-    "IMPORTANT: The FIRST write_file should include everything up to and including the first ~8 <section> slides.\n"
-    "Do NOT close </div></div></body></html> in the first write — leave it open for appending.\n"
-    "The LAST append_file MUST close all tags: </div></div></body></html>\n"
-    "START WRITING demo.html NOW — do not create any other files first."
+    "If the file is very large, use write_file for the first chunk (head + first slides),\n"
+    "then append_file to add more slides. The last append MUST close all tags.\n"
+    "START WRITING demo.html NOW."
 )
 
 # Single-file forms where CSS/JS must be inline (no external files)
@@ -1402,16 +1394,8 @@ def generate(
                 # Presentation/LaTeX: single self-contained file, no external CSS/JS
                 initial += "\n\n" + _SKELETON_FIRST_MESSAGE_SINGLE
             else:
-                # Website/blog/app: split into separate CSS, JS, HTML files
-                initial += (
-                    "\n\n" + _SKELETON_FIRST_MESSAGE_SPLIT +
-                    "\n\nFILE WRITING ORDER: You MUST write files in this order:\n"
-                    "1. styles.css (all CSS)\n"
-                    "2. script.js or visualizations.js (all JavaScript)\n"
-                    "3. Main file (index.html) — reference the CSS and JS files with "
-                    "<link> and <script> tags\n"
-                    "This prevents truncation. Do NOT combine everything into one file."
-                )
+                # Website/blog/app: recommend file organization
+                initial += "\n\n" + _SKELETON_FIRST_MESSAGE_SPLIT
 
         messages: list[dict] = [{"role": "user", "content": initial}]
 

@@ -32,36 +32,20 @@ class TestWriteFileSizeLimit:
         assert "Written" in result
         assert (tmp_path / "ok.txt").exists()
 
-    def test_one_over_split_limit_is_rejected(self, tmp_path):
-        """Non-main files are rejected above _WRITE_FILE_SPLIT_MAX (400 lines)."""
-        from paper_demo_agent.generation.tools import _WRITE_FILE_SPLIT_MAX
-        content = "\n".join(["x"] * (_WRITE_FILE_SPLIT_MAX + 1))
+    def test_large_file_is_accepted(self, tmp_path):
+        """No hard line limit — large files should be written successfully."""
+        content = "\n".join(["x"] * 500)
         result = tool_write_file(str(tmp_path), "big.txt", content)
-        assert "ERROR" in result
-        # File must NOT be written
-        assert not (tmp_path / "big.txt").exists()
+        assert "Written" in result
+        assert (tmp_path / "big.txt").exists()
 
-    def test_main_file_allowed_up_to_hard_max(self, tmp_path):
-        """Main files (demo.html) allowed up to _WRITE_FILE_HARD_MAX."""
-        from paper_demo_agent.generation.tools import _WRITE_FILE_HARD_MAX
-        content = "\n".join(["x"] * (_WRITE_FILE_HARD_MAX - 1))
+    def test_very_large_file_still_works(self, tmp_path):
+        """Even very large files should be accepted (max_tokens is the real safeguard)."""
+        content = "\n".join(["x"] * 1000)
         result = tool_write_file(str(tmp_path), "demo.html", content)
         assert "Written" in result
         assert (tmp_path / "demo.html").exists()
-
-    def test_main_file_rejected_above_hard_max(self, tmp_path):
-        """Main files rejected above _WRITE_FILE_HARD_MAX."""
-        from paper_demo_agent.generation.tools import _WRITE_FILE_HARD_MAX
-        content = "\n".join(["x"] * (_WRITE_FILE_HARD_MAX + 1))
-        result = tool_write_file(str(tmp_path), "demo.html", content)
-        assert "ERROR" in result
-
-    def test_far_over_limit_reports_correct_count(self, tmp_path):
-        line_count = 900
-        content = "\n".join(["x"] * line_count)
-        result = tool_write_file(str(tmp_path), "huge.txt", content)
-        assert "ERROR" in result
-        assert str(line_count) in result
+        assert "1000 lines" in result
 
     def test_under_limit_writes_correctly(self, tmp_path):
         content = "line1\nline2\nline3"
@@ -73,15 +57,16 @@ class TestWriteFileSizeLimit:
         result = tool_write_file(str(tmp_path), "empty.txt", "")
         assert "Written" in result
 
-    def test_dispatch_tool_write_file_enforces_limit(self, tmp_path):
+    def test_dispatch_tool_write_file_accepts_large(self, tmp_path):
+        """dispatch_tool should also accept large files (no hard limit)."""
         big_content = "\n".join(["x"] * 500)
         result = dispatch_tool(
             "write_file",
             {"path": "big.html", "content": big_content},
             str(tmp_path),
         )
-        assert "ERROR" in result
-        assert not (tmp_path / "big.html").exists()
+        assert "Written" in result
+        assert (tmp_path / "big.html").exists()
 
     def test_max_lines_constant_is_300(self):
         assert _WRITE_FILE_MAX_LINES == 300

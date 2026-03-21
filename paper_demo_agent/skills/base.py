@@ -1192,25 +1192,10 @@ Step 4 ── REQUIREMENTS + DONE
   • When running build scripts: use execute_python(open('build.py').read()) — never subprocess.
   • Minimize iterations: write the complete file in one write_file call, then move on.
 
-━━ CRITICAL FILE SIZE RULE ━━
-  NEVER write a file longer than 300 lines in a single write_file call.
-  If a file would exceed 300 lines, you MUST write it in MULTIPLE calls — split intelligently:
-
-  FOR WEBSITE / BLOG / APP FORMS (multi-file):
-    Step 1 → write styles.css   (all CSS — typically 100-200 lines)
-    Step 2 → write script.js    (all JavaScript — typically 100-300 lines)
-    Step 3 → write index.html   (skeleton referencing styles.css + script.js)
-    Step 4 → overwrite sections of index.html if content is still incomplete
-
-  FOR PRESENTATION FORM (single self-contained demo.html):
-    The main file MUST be demo.html — do NOT create separate CSS/JS files.
-    Write demo.html in chunks: first call writes the skeleton (head, first 5 slides),
-    second call overwrites with more slides appended — each write_file ≤300 lines.
-    reveal.js REQUIRES inline <style> and <script> in the same HTML file.
-
-  FOR PYTHON FORMS: extract large data into data.py, helpers into helpers.py.
-  FOR LATEX: split appendix into appendix.tex and \\input{{appendix}} from main file.
-
-  NEVER truncate content to force it under the limit — split intelligently instead.
-  NEVER attempt to write a 500+ line file in one shot — it WILL be truncated and the tool call will fail.
-  PRIORITY: Always write the main file FIRST (even as a skeleton), then add supporting files."""
+━━ FILE ORGANIZATION TIPS ━━
+  • For websites/blogs: split CSS into styles.css, JS into script.js, then index.html referencing both.
+  • For presentations: write demo.html as ONE self-contained file (reveal.js needs inline CSS/JS).
+    Use write_file for the first chunk, append_file to add more slides.
+  • For Python apps: one app.py is fine. Extract large data constants into data.py if needed.
+  • For LaTeX: split appendix into appendix.tex and \\input{{appendix}} from main file.
+  • PRIORITY: Always write the MAIN file first — without it, the demo is broken."""
