@@ -6,6 +6,7 @@ from paper_demo_agent.paper.models import Paper, PaperAnalysis
 from paper_demo_agent.skills.base import BaseSkill
 from paper_demo_agent.skills.router import SkillRouter
 from paper_demo_agent.skills.model_inference import ModelInferenceSkill
+from paper_demo_agent.skills.findings_dashboard import FindingsDashboardSkill
 from paper_demo_agent.skills.general_qa import GeneralQASkill
 from paper_demo_agent.skills.theoretical_explainer import TheoreticalExplainerSkill
 from paper_demo_agent.skills.streamlit_demo import StreamlitDemoSkill
@@ -132,6 +133,16 @@ class TestModelInferenceSkill:
         assert paper.title in msg
 
 
+class TestFindingsDashboardSkill:
+    def test_polish_prompt_includes_contrast_check_for_app(self):
+        skill = FindingsDashboardSkill()
+        paper = _make_paper()
+        analysis = _make_analysis("empirical", "FindingsDashboardSkill", "app", "findings")
+        prompt = skill.get_polish_prompt(paper, analysis, "app", "findings", generated_files=["app.py"])
+        assert "contrast" in prompt.lower()
+        assert "gray-on-light" in prompt.lower()
+
+
 class TestTheoreticalExplainerSkill:
     def test_system_prompt_includes_revealjs(self):
         skill = TheoreticalExplainerSkill()
@@ -152,6 +163,14 @@ class TestStreamlitDemoSkill:
         analysis = _make_analysis("model", "StreamlitDemoSkill", "app_streamlit", "user_demo")
         prompt = skill.get_system_prompt(paper, analysis, "app_streamlit", "user_demo")
         assert "streamlit" in prompt.lower() or "Streamlit" in prompt
+
+    def test_polish_prompt_mentions_use_container_width(self):
+        skill = StreamlitDemoSkill()
+        paper = _make_paper()
+        analysis = _make_analysis("model", "StreamlitDemoSkill", "app_streamlit", "user_demo")
+        prompt = skill.get_polish_prompt(paper, analysis, "app_streamlit", "user_demo", ["app.py"])
+        assert "use_column_width" in prompt
+        assert "use_container_width" in prompt
 
 
 class TestReadmeGeneratorSkill:

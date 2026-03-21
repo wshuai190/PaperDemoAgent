@@ -61,10 +61,21 @@ chart_data.categories = ['Ours', 'Baseline A', 'Baseline B']
 chart_data.add_series('Score', (45.3, 38.1, 41.7))
 chart = slide.shapes.add_chart(XL_CHART_TYPE.COLUMN_CLUSTERED,
     Inches(1), Inches(1.2), Inches(11), Inches(5.5), chart_data).chart
+chart.has_title = True
+chart.chart_title.text_frame.text = 'Main Benchmark Results'
 chart.has_legend = True
+chart.chart_area.format.fill.solid(); chart.chart_area.format.fill.fore_color.rgb = RGBColor(0x09,0x09,0x0b)
+chart.plot_area.format.fill.solid(); chart.plot_area.format.fill.fore_color.rgb = RGBColor(0x11,0x11,0x13)
+chart.value_axis.has_major_gridlines = True
 for i, series in enumerate(chart.plots[0].series):
     series.format.fill.solid()
     series.format.fill.fore_color.rgb = [RGBColor(0x63,0x66,0xf1), RGBColor(0x22,0xc5,0x5e)][i % 2]
+chart.chart_title.text_frame.paragraphs[0].font.color.rgb = RGBColor(0xfa,0xfa,0xfa)
+chart.category_axis.tick_labels.font.color.rgb = RGBColor(0xfa,0xfa,0xfa)
+chart.value_axis.tick_labels.font.color.rgb = RGBColor(0xfa,0xfa,0xfa)
+chart.legend.font.color.rgb = RGBColor(0xfa,0xfa,0xfa)
+chart.plots[0].has_data_labels = True
+chart.plots[0].data_labels.show_value = True
 ```
 
 TABLE (styled results comparison):
@@ -93,7 +104,7 @@ import matplotlib.pyplot as plt; from io import BytesIO
 fig, ax = plt.subplots(figsize=(10, 4)); fig.patch.set_facecolor('#09090b'); ax.set_facecolor('#111113')
 # ... draw boxes, arrows, text ...
 ax.axis('off'); buf = BytesIO()
-plt.savefig(buf, format='png', bbox_inches='tight', dpi=150); buf.seek(0); plt.close()
+plt.savefig(buf, format='png', bbox_inches='tight', dpi=300); buf.seek(0); plt.close()
 slide.shapes.add_picture(buf, Inches(1.5), Inches(1.2), Inches(10.0), Inches(5.5))
 ```
 
@@ -106,6 +117,8 @@ SAVE: `prs.save('presentation.pptx')`
   All table data must be manually read from the paper and hard-coded as Python lists.
 • NEVER dump raw PDF text into single-column tables. Tables must be properly structured
   with typed headers and data columns (e.g., ['Method', 'BLEU', 'ROUGE']).
+• For dark-theme slides, charts MUST style title/legend/axes/ticks to light text and include data labels
+  for key result values. Default python-pptx chart colors are often unreadable.
 • Include only 2-3 key results tables. Skip hyperparameter configs, training details, appendix tables.
 • 16-20 slides maximum. Every slide must advance the narrative.
 """
@@ -395,7 +408,8 @@ PRIORITY ORDER:
 4. Build slides with REAL content:
    - Figures: embed extracted PDF PNGs with slide.shapes.add_picture('figures/page_N.png', ...)
    - Tables: use slide.shapes.add_table(n_rows, n_cols, left, top, width, height).table — NEVER use rectangles for tables
-   - Charts: use slide.shapes.add_chart(XL_CHART_TYPE.BAR_CLUSTERED, ...) for all comparative data
+   - Charts: use slide.shapes.add_chart(XL_CHART_TYPE.BAR_CLUSTERED, ...) (or LINE_MARKERS for trends)
+     and explicitly set chart title, legend font color, axis tick/title colors, and data labels.
 5. Run build.py with execute_python — must produce presentation.pptx without errors
 
 CRITICAL RULES:
@@ -419,6 +433,10 @@ Step 1 — Read build.py and audit critical requirements:
   • Are ALL numeric result tables implemented with slide.shapes.add_table(...).table?
     → If any table was built using filled rectangles/textboxes, REWRITE it using add_table()
   • Is there at least one add_chart(XL_CHART_TYPE.*) with real paper comparison numbers?
+  • Chart readability on dark background:
+    → chart title, legend text, axis titles, and tick labels use light font color
+    → plot/chart area fill matches dark theme; major gridlines are subtle but visible
+    → show data labels on key charts (`plot.has_data_labels = True`)
   • Are there >=12 slides covering the full story?
   • Are key figures embedded using slide.shapes.add_picture('figures/page_N.png', ...)?
     → If figures/ directory exists, make sure they are used in the slides

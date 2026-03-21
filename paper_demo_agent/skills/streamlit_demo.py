@@ -7,6 +7,10 @@ from paper_demo_agent.skills.base import BaseSkill, FORM_SPECS
 _STREAMLIT_PATTERNS = """
 ━━ STREAMLIT API QUICK REFERENCE (v1.38+) ━━
 
+DEPRECATION RULE (MANDATORY):
+  • NEVER use `use_column_width` in `st.image` or any API.
+  • Always use `use_container_width=True`.
+
 PAGE CONFIG (MUST be first st.* call):
   ```python
   import streamlit as st
@@ -285,6 +289,7 @@ Step 2 — Visualization quality:
   • Are `st.metric()` cards used to highlight key paper results?
   • Is there at least one interactive Plotly chart with hover tooltips?
   • Do charts have clear axis labels, titles, and legends?
+  • Replace any deprecated `use_column_width` usage with `use_container_width=True`.
 
 Step 3 — UX and polish:
   • Is there a header with the paper title, authors, and venue?

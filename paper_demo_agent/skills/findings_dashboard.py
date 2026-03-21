@@ -111,6 +111,10 @@ CHART PATTERNS (for website/Gradio):
       return fig
   ```
 
+  READABILITY RULE:
+  • Never use low-contrast annotation text (e.g., gray on light backgrounds).
+  • Axis titles, tick labels, legends, and callouts must be clearly legible against chart backgrounds.
+
 WEBSITE LAYOUT BLUEPRINT (for website form):
   ```html
   <!-- sticky nav: Overview | Main Results | Ablation | Efficiency | Insights -->
@@ -215,6 +219,7 @@ Step 2 — Chart quality:
 {figs_line}  • Are bar charts grouped (all metrics side by side for all methods)?
   • Do charts have proper axis labels, titles, and legends?
   • Are dark themes applied to all charts?
+  • Is annotation/header text contrast strong enough to be readable at a glance (no gray-on-light labels)?
   • Is there an efficiency plot (accuracy vs. parameters/FLOPs)?
   • Is there an ablation study visualization?
   • Does the headline stat card show the main finding prominently?

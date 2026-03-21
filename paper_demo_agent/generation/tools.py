@@ -872,14 +872,104 @@ def _validate_html(content: str, output_dir: str, file_path: str) -> List[str]:
     return issues
 
 
-def _validate_python(content: str) -> List[str]:
+def _validate_python(content: str, file_path: str = "") -> List[str]:
     """Validate Python file syntax using ast.parse."""
     import ast
     try:
         ast.parse(content)
-        return []
     except SyntaxError as e:
         return [f"Python syntax error at line {e.lineno}: {e.msg}"]
+
+    issues: List[str] = []
+
+    # Warning-only quality checks for generated PPT scripts.
+    # These are intentionally conservative and only run for build.py files.
+    if Path(file_path).name == "build.py" and "add_chart(" in content:
+        if ".style" in content:
+            issues.append("Avoid chart.style presets; explicitly set chart fills/colors/fonts for consistent theming")
+        if "legend.font.color.rgb" not in content:
+            issues.append("PPT dark theme chart may be hard to read: set chart.legend.font.color.rgb to a light color")
+        if "tick_labels.font.color.rgb" not in content:
+            issues.append("PPT dark theme chart may be hard to read: set axis tick label font colors to a light color")
+        if "chart_title" not in content:
+            issues.append("Chart is missing an explicit title; add chart.has_title and chart.chart_title.text_frame.text")
+        if "has_data_labels" not in content:
+            issues.append("Chart is missing data labels; enable plot.has_data_labels for key comparison charts")
+
+    if Path(file_path).name == "app.py" and "matplotlib" in content and "ax.text(" in content:
+        low_contrast_patterns = (
+            "color='gray'",
+            'color="gray"',
+            "color='grey'",
+            'color="grey"',
+            "color='#999'",
+            'color="#999"',
+            "color='#aaa'",
+            'color="#aaa"',
+        )
+        if any(p in content.lower() for p in low_contrast_patterns):
+            issues.append(
+                "Matplotlib annotation text may be low-contrast (gray-on-light). "
+                "Use higher-contrast colors for ax.text labels/callouts."
+            )
+
+    if Path(file_path).name == "app.py" and "streamlit" in content.lower():
+        if "use_column_width" in content:
+            issues.append(
+                "Streamlit deprecated API: `use_column_width` detected. "
+                "Replace with `use_container_width=True`."
+            )
+
+    if Path(file_path).name == "app.py" and "matplotlib" in content:
+        lower = content.lower()
+        light_bg_tokens = (
+            "set_facecolor('white'",
+            'set_facecolor("white"',
+            "set_facecolor('#fff",
+            'set_facecolor("#fff',
+            "set_facecolor('#ffffff",
+            'set_facecolor("#ffffff',
+            "set_facecolor('#f9",
+            'set_facecolor("#f9',
+            "set_facecolor('#faf",
+            'set_facecolor("#faf',
+        )
+        gray_axis_tokens = (
+            "set_title(",
+            "set_xlabel(",
+            "set_ylabel(",
+            "tick_params(",
+            "xticks(",
+            "yticks(",
+            "axhline(",
+            "axvline(",
+        )
+        gray_color_tokens = (
+            "color='gray'",
+            'color="gray"',
+            "color='grey'",
+            'color="grey"',
+            "colors='gray'",
+            'colors="gray"',
+            "colors='grey'",
+            'colors="grey"',
+            "color='#999'",
+            'color="#999"',
+            "color='#aaa'",
+            'color="#aaa"',
+        )
+
+        has_light_bg = any(tok in lower for tok in light_bg_tokens)
+        has_gray_axis_or_line = any(tok in lower for tok in gray_axis_tokens) and any(
+            tok in lower for tok in gray_color_tokens
+        )
+        if has_light_bg and has_gray_axis_or_line:
+            issues.append(
+                "Matplotlib axis/title/line color may be low-contrast on a light background. "
+                "Avoid gray for axis text/guide lines when facecolor is white or near-white."
+            )
+
+    return issues
 
 
 def _validate_js(content: str) -> List[str]:
@@ -944,7 +1034,7 @@ def tool_validate_output(output_dir: str, path: str) -> str:
     if suffix in (".html", ".htm"):
         issues = _validate_html(content, output_dir, path)
     elif suffix == ".py":
-        issues = _validate_python(content)
+        issues = _validate_python(content, file_path=path)
     elif suffix in (".js", ".mjs"):
         issues = _validate_js(content)
     else:
