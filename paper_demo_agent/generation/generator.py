@@ -1114,7 +1114,7 @@ def _run_loop(
     skeleton_injected = False  # track whether skeleton-first hint was injected
 
     # Determine the demo form from the phase label for skeleton-first logic
-    build_form = phase_label.replace("build-", "").replace("build", "").strip() or ""
+    build_form = phase_label.replace("build-", "").replace("build", "").strip().rstrip("-") or ""
 
     for iteration in range(max_iter):
         # Context compaction: after every 4 iterations, compact old messages (optimization #2)
@@ -1180,7 +1180,8 @@ def _run_loop(
             _main_file = _spec.get("main_file", "index.html")
             _main_path = Path(output_dir) / _main_file
             _all_files = [f.name for f in Path(output_dir).rglob("*") if f.is_file() and f.name != "paper.pdf"]
-            _has_support = any(f.endswith((".css", ".js", ".py", ".txt")) for f in _all_files)
+            _non_main = [f for f in _all_files if f != _main_file]
+            _has_support = len(_non_main) > 0  # any file besides the main file
             _has_main = _main_path.exists()
 
             if _has_support and not _has_main:
@@ -1271,9 +1272,7 @@ def _run_loop(
 
         # After too many consecutive search-only iters, force the model to write
         if is_build and search_only_iters >= _MAX_SEARCH_ONLY_ITERS:
-            spec = FORM_SPECS.get(
-                phase_label.replace("build-", "").replace("build", "") or "website", {}
-            )
+            spec = FORM_SPECS.get(build_form or "website", {})
             main = spec.get("main_file", "index.html")
             nudge = (
                 "STOP SEARCHING. You have spent too many iterations on web_search without writing any files. "
