@@ -1130,7 +1130,7 @@ def _run_loop(
         # Sonnet's max output is 64K tokens; we use 32K for write-heavy iterations.
         if is_build and iteration < 2:
             _max_tokens = 8192
-        elif is_build and iteration >= 5:
+        elif is_build and iteration >= 3:
             _max_tokens = 32768  # write-heavy: need room for 500+ line files
         else:
             _max_tokens = 16384
