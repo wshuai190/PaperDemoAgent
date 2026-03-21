@@ -1191,6 +1191,8 @@ Step 4 ── REQUIREMENTS + DONE
   • Do NOT web_search for library docs, CDN URLs, or API syntax — everything is pre-baked above.
   • When running build scripts: use execute_python(open('build.py').read()) — never subprocess.
   • Minimize iterations: write the complete file in one write_file call, then move on.
+  • When calling write_file: keep commentary BRIEF (1-2 sentences max). Your token budget is
+    shared between commentary and file content — long explanations mean truncated files.
 
 ━━ FILE ORGANIZATION TIPS ━━
   • For websites/blogs: split CSS into styles.css, JS into script.js, then index.html referencing both.

@@ -1141,6 +1141,27 @@ def _run_loop(
         if response.content:
             on_emit(response.content)
 
+        # Handle max_tokens truncation: the model was cut off mid-response.
+        # Tool calls may be incomplete (missing arguments). Discard broken
+        # tool calls and tell the model to retry with less commentary.
+        if response.stop_reason == "max_tokens" and response.tool_calls:
+            # Check if any tool call is missing critical arguments
+            broken = [tc for tc in response.tool_calls
+                      if tc.name == "write_file" and "content" not in tc.arguments]
+            if broken:
+                on_emit(f"\n  ⚠️ Output truncated (max_tokens={_max_tokens}) — {len(broken)} tool call(s) incomplete\n")
+                # Don't append the broken assistant message — just add a retry hint
+                messages.append({"role": "user", "content": (
+                    "Your previous response was TRUNCATED — the write_file call was cut off "
+                    "before the content could be written. This happens when your commentary "
+                    "is too long. RETRY NOW with these rules:\n"
+                    "1. Write ZERO commentary — go straight to the write_file tool call\n"
+                    "2. If the file is >400 lines, use write_file for the first half, "
+                    "then append_file for the rest\n"
+                    "3. Start your response with the tool call immediately"
+                )})
+                continue  # retry this iteration
+
         if response.stop_reason == "end_turn" or not response.tool_calls:
             if response.content:
                 messages.append({"role": "assistant", "content": response.content})

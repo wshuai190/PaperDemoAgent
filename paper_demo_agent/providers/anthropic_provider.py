@@ -187,6 +187,13 @@ class AnthropicProvider(BaseLLMProvider):
         tools: Optional[List[Dict]] = None,
         max_tokens: int = 8192,
     ) -> LLMResponse:
+        """Use streaming internally to avoid Anthropic's 10-min server timeout.
+
+        The API requires streaming for requests that take >10 min. With large
+        max_tokens (32K) + tool use, responses can exceed that. By streaming
+        and collecting the final message, we get the full response without
+        timeouts while keeping the same return type.
+        """
         client = self._client()
         system_kwarg = self._build_system_kwarg(system)
         kwargs = dict(
@@ -199,7 +206,9 @@ class AnthropicProvider(BaseLLMProvider):
         if tools:
             kwargs["tools"] = self._convert_tools(tools)
 
-        response = client.messages.create(**kwargs)
+        # Stream and collect the final message to avoid server timeout
+        with client.messages.stream(**kwargs) as stream:
+            response = stream.get_final_message()
         return self._parse_response(response)
 
     def stream_chat(
