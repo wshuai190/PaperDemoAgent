@@ -626,6 +626,34 @@ Step 4 — Universal checks:
 
 Target: Publication-quality ML architecture diagrams."""
 
+        elif demo_form == "website":
+            figs_line = (
+                f"  • Pre-extracted figures: {', '.join(figures_available)}. "
+                f"Embed ALL of them with <img> tags in relevant content sections!\n"
+                if figures_available else ""
+            )
+            return f"""QUALITY REVIEW for website — files: {flist}
+
+Step 1 — Read index.html and check:
+{figs_line}  • Does the page have a sticky nav with section links?
+  • Is there a dark/light theme toggle that actually works?
+  • Are all interactive elements (Chart.js, D3.js) rendering with real paper data?
+  • Is there a BibTeX / citation section?
+  • Are there >=5 content sections (intro, method, results, discussion, citation)?
+
+Step 2 — Content:
+  • Real paper numbers in all tables and charts (not placeholders)
+  • Paper title, all authors, venue, year in hero section
+  • Mobile-responsive layout (check media queries exist)
+  • Smooth scroll between sections
+
+Step 3 — Universal checks:
+  • All CDN URLs are correct pinned versions
+  • All figures from figures/ directory are embedded via <img> tags
+  • Dark theme consistency (no jarring white panels)
+
+Target: Stripe / Vercel documentation quality."""
+
         else:
             # Fallback to generic polish for other forms
             return self.get_polish_prompt(paper, analysis, demo_form, demo_type, generated_files)

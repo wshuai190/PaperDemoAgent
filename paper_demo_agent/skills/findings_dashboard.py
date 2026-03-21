@@ -209,9 +209,10 @@ Step 1 — Read {main_file} and verify data accuracy:
   • Is there a BibTeX citation block?"""
 
         if demo_form in ("app", "website"):
-            return base_checks + """
+            figs_line = f"  • Pre-extracted figures available: {', '.join(figures_available)}. Embed them with <img> tags in relevant sections!\n" if figures_available else ""
+            return base_checks + f"""
 Step 2 — Chart quality:
-  • Are bar charts grouped (all metrics side by side for all methods)?
+{figs_line}  • Are bar charts grouped (all metrics side by side for all methods)?
   • Do charts have proper axis labels, titles, and legends?
   • Are dark themes applied to all charts?
   • Is there an efficiency plot (accuracy vs. parameters/FLOPs)?

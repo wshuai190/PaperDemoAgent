@@ -202,9 +202,10 @@ Step 1 — Read {main_file} and verify core content:
   • Is there a performance/benchmark table from the paper (real numbers)?"""
 
         if demo_form in ("app", "website"):
-            return base_checks + """
+            figs_line = f"  • Pre-extracted figures available: {', '.join(figures_available)}. Embed them with <img> tags!\n" if figures_available else ""
+            return base_checks + f"""
 Step 2 — Code quality:
-  • Are copy-to-clipboard buttons on all code blocks?
+{figs_line}  • Are copy-to-clipboard buttons on all code blocks?
   • Is Prism.js (or highlight.js) used for syntax highlighting?
   • Are there at least 3 progressively complex examples?
   • Does the FAQ section cover at least 5 common gotchas?
