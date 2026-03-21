@@ -100,7 +100,10 @@ FORM_SPECS: dict[str, dict] = {
             "Hero section: paper title (large), author list with superscript affiliations, venue badge, year, action buttons [Paper] [Code] [Demo] [Video]",
             "Implement CSS custom properties: `--primary`, `--bg`, `--bg2`, `--text`, `--text2`, `--border`, `--accent`",
             "Support dark mode: `@media (prefers-color-scheme: dark)` + manual toggle button in nav",
-            "Add IntersectionObserver scroll animations: sections fade + slide up as user scrolls",
+            "Add IntersectionObserver scroll animations: sections fade + slide up as user scrolls. "
+            "CRITICAL: If Chart.js canvases are inside animated/reveal containers, resize them when visible: "
+            "observer callback must call `Chart.getChart(canvas)?.resize()` after adding the visible class, "
+            "because Chart.js measures 0×0 if the canvas is hidden at init time.",
             "BibTeX section: pre-formatted citation block + 'Copy BibTeX' button (clipboard API)",
             "Fully responsive: 320px to 1200px; CSS grid/flexbox layout, no horizontal overflow",
             "All math notation uses auto-rendered KaTeX (call `renderMathInElement(document.body)`)",
