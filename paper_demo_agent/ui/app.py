@@ -969,7 +969,7 @@ def _header_html() -> str:
      data-text="Turn any scientific paper into a live interactive demo — in minutes.">Turn any scientific paper into a live interactive demo — in minutes.</p>
   <div class="badges">
     <span class="pda-badge pda-badge-accent">v{__version__}</span>
-    <span class="pda-badge pda-badge-green">6 providers &middot; 15 skills</span>
+    <span class="pda-badge pda-badge-green">6 providers &middot; 13 skills</span>
     <span class="pda-badge pda-badge-neutral">10 output formats</span>
     <span class="pda-badge pda-badge-neutral">pip install paper-demo-agent</span>
   </div>
@@ -1820,8 +1820,7 @@ def build_ui() -> gr.Blocks:
 <div style="max-width:700px">
   <h3 style="font-size:16px;font-weight:600;color:var(--pda-text);margin:0 0 4px">Authentication</h3>
   <p style="font-size:13px;color:var(--pda-text2);margin:0 0 12px">
-    Use your existing CLI tools to authenticate — <strong>no API keys needed</strong>.
-    Or set keys manually below.
+    Use existing CLI credentials when available, or set provider keys manually below.
   </p>
 </div>""")
 
@@ -1836,10 +1835,10 @@ def build_ui() -> gr.Blocks:
     <span style="font-size:15px;font-weight:700;color:var(--pda-text)">Claude Code</span>
     <span style="font-size:10px;background:rgba(99,102,241,0.15);color:#a5b4fc;
                  border:1px solid rgba(99,102,241,0.3);border-radius:10px;padding:1px 8px;
-                 font-weight:500">FREE with Pro/Max</span>
+                 font-weight:500">Uses Pro/Max</span>
   </div>
   <p style="font-size:12px;color:var(--pda-text2);margin:0 0 12px;line-height:1.5">
-    Use your Claude Pro or Max subscription. No API billing.
+    Use your Claude Pro or Max subscription. No separate API key or API billing.
   </p>
   <div style="background:var(--pda-bg);border-radius:6px;padding:10px 12px;margin-bottom:8px">
     <code style="font-size:11px;color:var(--pda-text3);display:block">$ npm install -g @anthropic-ai/claude-code</code>
@@ -2014,9 +2013,9 @@ def build_ui() -> gr.Blocks:
 
 <div class="help-grid">
   <div class="help-card">
-    <h4>1. Set an API Key</h4>
-    <p>Go to the Settings tab and paste your Anthropic, OpenAI, or other provider key.
-       Keys persist across sessions.</p>
+    <h4>1. Authenticate</h4>
+    <p>Use Claude Code, Gemini CLI, gcloud ADC, or a saved API key from the Settings tab.
+       Saved keys persist across sessions.</p>
   </div>
   <div class="help-card">
     <h4>2. Enter a Paper</h4>
@@ -2025,8 +2024,8 @@ def build_ui() -> gr.Blocks:
   </div>
   <div class="help-card">
     <h4>3. Choose What to Make</h4>
-    <p>Leave as <em>Auto</em> to let the agent decide, or pick Presentation / Demo App /
-       Project Page / Diagram. Sub-options appear for the chosen category.</p>
+    <p>Leave as <em>Auto</em> to let the agent decide, or pick App, Presentation,
+       Page, or Diagram. Sub-options appear for the chosen category.</p>
   </div>
   <div class="help-card">
     <h4>4. Download or Open</h4>
