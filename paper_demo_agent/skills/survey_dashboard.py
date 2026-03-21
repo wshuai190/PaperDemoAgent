@@ -9,7 +9,25 @@ class SurveyDashboardSkill(BaseSkill):
     description = "Survey/review paper → comparison dashboard or landscape map"
 
     def get_system_prompt(self, paper: Paper, analysis: PaperAnalysis, demo_form: str, demo_type: str) -> str:
-        return f"""You are an expert research landscape analyst who builds the kinds of
+        authors_str = ", ".join(paper.authors[:5]) if paper.authors else "See paper"
+        year_str = str(paper.year) if paper.year else "N/A"
+        venue_str = getattr(paper, "venue", None) or "arXiv"
+        arxiv_str = (getattr(paper, "arxiv_url", None) or
+                     (f"https://arxiv.org/abs/{paper.arxiv_id}" if getattr(paper, 'arxiv_id', None) else "N/A"))
+        paper_facts_block = (
+            f"━━ PAPER FACTS — ANCHOR (always use these exact values) ━━\n"
+            f"Title   : {paper.title}\n"
+            f"Authors : {authors_str}\n"
+            f"Year    : {year_str}\n"
+            f"Venue   : {venue_str}\n"
+            f"arXiv   : {arxiv_str}\n"
+            f"Core Contribution: {analysis.contribution or 'See abstract'}\n\n"
+            f"MANDATORY: The EXACT paper title above MUST appear in your output (header/title/hero).\n"
+            f"Use the EXACT author names above — never write \"[Author Name]\" placeholders.\n"
+            f"Use EXACT numbers from the paper — never write \"~X%\" or \"approximately\".\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        )
+        return paper_facts_block + f"""You are an expert research landscape analyst who builds the kinds of
 interactive survey tools that become the definitive reference for a field —
 like Papers with Code method comparison pages, awesome-* GitHub lists, and
 the NLP-Progress leaderboard, but richer and more visual.
@@ -200,7 +218,20 @@ FIGURE INTEGRATION (for slides/latex/presentation forms):
 """
 
     def get_initial_message(self, paper: Paper, analysis: PaperAnalysis, demo_form: str, demo_type: str) -> str:
-        return f"""Build a {demo_form} survey dashboard for: "{paper.title}"
+        authors_str = ", ".join(paper.authors[:5]) if paper.authors else "See paper"
+        year_str = str(paper.year) if paper.year else "N/A"
+        venue_str = getattr(paper, "venue", None) or "arXiv"
+        paper_anchor = (
+            f"══════════════════════════════════════════════════\n"
+            f"PAPER FACTS — USE THESE EXACT STRINGS IN OUTPUT\n"
+            f"══════════════════════════════════════════════════\n"
+            f"Title   : {paper.title}\n"
+            f"Authors : {authors_str}\n"
+            f"Year    : {year_str} | Venue: {venue_str}\n"
+            f"Core    : {analysis.contribution or 'See abstract below'}\n"
+            f"══════════════════════════════════════════════════\n\n"
+        )
+        return paper_anchor + f"""Build a {demo_form} survey dashboard for: "{paper.title}"
 
 Contribution: {analysis.contribution}
 Demo type: {demo_type}

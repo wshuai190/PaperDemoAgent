@@ -64,7 +64,7 @@ KIND_OPTIONS    = ["Auto", "App", "Presentation", "Page", "Diagram"]
 APP_OPTIONS     = ["Auto", "Gradio (HF Space)", "Streamlit"]
 PRES_OPTIONS    = ["Auto", "PowerPoint (.pptx)", "LaTeX / Beamer", "HTML Slides"]
 PAGE_OPTIONS    = ["Auto", "Project Page", "GitHub README", "Blog Article"]
-DIAGRAM_OPTIONS = ["Auto", "Interactive (Mermaid)", "Graphviz (SVG/PNG)"]
+DIAGRAM_OPTIONS = ["Auto", "Interactive (Mermaid)", "Interactive (Cytoscape)", "Graphviz (SVG/PNG)"]
 FOCUS_OPTIONS   = ["Auto", "Try the model", "Explore results", "Explain theory"]
 
 KIND_META = {
@@ -101,9 +101,10 @@ PAGE_META = {
 }
 
 DIAGRAM_META = {
-    "Auto":                 "AI picks the best diagram format for this paper.",
-    "Interactive (Mermaid)": "Interactive Mermaid.js flowchart — clickable nodes, zoom/pan, step-by-step walkthrough.",
-    "Graphviz (SVG/PNG)":    "Python graphviz → publication-quality SVG/PNG architecture diagrams.",
+    "Auto":                    "AI picks the best diagram format for this paper.",
+    "Interactive (Mermaid)":   "Interactive Mermaid.js flowchart — clickable nodes, zoom/pan, step-by-step walkthrough.",
+    "Interactive (Cytoscape)": "Cytoscape.js + dagre layout — draw.io-quality architecture diagrams with compound nodes, search, export.",
+    "Graphviz (SVG/PNG)":      "Python graphviz → publication-quality SVG/PNG architecture diagrams.",
 }
 
 FOCUS_META = {
@@ -165,9 +166,10 @@ def _resolve_form_type(kind: str, app_format: str, pres_format: str,
         return page_map.get(page_format, None), None
     if kind == "Diagram":
         diag_map = {
-            "Auto":                  None,
-            "Interactive (Mermaid)":  "flowchart",
-            "Graphviz (SVG/PNG)":     "diagram_graphviz",
+            "Auto":                    None,
+            "Interactive (Mermaid)":   "flowchart",
+            "Interactive (Cytoscape)": "flowchart_pro",
+            "Graphviz (SVG/PNG)":      "diagram_graphviz",
         }
         return diag_map.get(diagram_format, None), None
     return None, None
@@ -2253,6 +2255,7 @@ paper-demo-agent providers
                     "presentation":     "Opened in browser",
                     "website":          "Opened in browser",
                     "flowchart":        "Opened in browser",
+                    "flowchart_pro":    "Opened in browser",
                     "slides":           "Generating .pptx and opening in PowerPoint / LibreOffice…",
                     "latex":            "Opened .tex file — compile with: pdflatex presentation.tex",
                     "page_readme":      "Opened README.md in default viewer",

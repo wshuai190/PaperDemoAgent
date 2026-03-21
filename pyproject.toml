@@ -1,6 +1,6 @@
 [project]
 name = "paper-demo-agent"
-version = "0.3.3"
+version = "0.4.0"
 description = "AI agent that reads any scientific paper and builds a live demo"
 readme = "README.md"
 requires-python = ">=3.9"

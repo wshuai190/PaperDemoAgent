@@ -9,7 +9,25 @@ class AlgorithmVisualizerSkill(BaseSkill):
     description = "Algorithm paper → interactive step-by-step visualizer"
 
     def get_system_prompt(self, paper: Paper, analysis: PaperAnalysis, demo_form: str, demo_type: str) -> str:
-        return f"""You are an expert algorithm educator who creates the kind of interactive
+        authors_str = ", ".join(paper.authors[:5]) if paper.authors else "See paper"
+        year_str = str(paper.year) if paper.year else "N/A"
+        venue_str = getattr(paper, "venue", None) or "arXiv"
+        arxiv_str = (getattr(paper, "arxiv_url", None) or
+                     (f"https://arxiv.org/abs/{paper.arxiv_id}" if getattr(paper, 'arxiv_id', None) else "N/A"))
+        paper_facts_block = (
+            f"━━ PAPER FACTS — ANCHOR (always use these exact values) ━━\n"
+            f"Title   : {paper.title}\n"
+            f"Authors : {authors_str}\n"
+            f"Year    : {year_str}\n"
+            f"Venue   : {venue_str}\n"
+            f"arXiv   : {arxiv_str}\n"
+            f"Core Contribution: {analysis.contribution or 'See abstract'}\n\n"
+            f"MANDATORY: The EXACT paper title above MUST appear in your output (in the header/title/hero).\n"
+            f"Use the EXACT author names above — never write \"[Author Name]\" placeholders.\n"
+            f"Use EXACT numbers from the paper — never write \"~X%\" or \"approximately\".\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        )
+        return paper_facts_block + f"""You are an expert algorithm educator who creates the kind of interactive
 visualizations that make concepts click instantly — think VisuAlgo, Algorithm Visualizer,
 and 3Blue1Brown-style animations in the browser.
 
@@ -182,7 +200,20 @@ FIGURE INTEGRATION (for slides/latex/presentation forms):
 """
 
     def get_initial_message(self, paper: Paper, analysis: PaperAnalysis, demo_form: str, demo_type: str) -> str:
-        return f"""Build a {demo_form} interactive algorithm visualizer for: "{paper.title}"
+        authors_str = ", ".join(paper.authors[:5]) if paper.authors else "See paper"
+        year_str = str(paper.year) if paper.year else "N/A"
+        venue_str = getattr(paper, "venue", None) or "arXiv"
+        paper_anchor = (
+            f"══════════════════════════════════════════════════\n"
+            f"PAPER FACTS — USE THESE EXACT STRINGS IN OUTPUT\n"
+            f"══════════════════════════════════════════════════\n"
+            f"Title   : {paper.title}\n"
+            f"Authors : {authors_str}\n"
+            f"Year    : {year_str} | Venue: {venue_str}\n"
+            f"Core    : {analysis.contribution or 'See abstract below'}\n"
+            f"══════════════════════════════════════════════════\n\n"
+        )
+        return paper_anchor + f"""Build a {demo_form} interactive algorithm visualizer for: "{paper.title}"
 
 Contribution: {analysis.contribution}
 Demo type: {demo_type}

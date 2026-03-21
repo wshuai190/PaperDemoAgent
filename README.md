@@ -13,18 +13,18 @@
 
 ![Paper Demo Agent UI](docs/assets/ui-screenshot.svg)
 
-[Quick Start](#quick-start) | [What's In 0.3.3](#whats-new-in-v033) | [Forms](#forms-and-subtypes) | [Providers](#supported-providers) | [CLI](#cli-reference) | [UI](#web-ui) | [Python API](#python-api)
+[Quick Start](#quick-start) | [What's New in v0.4.0](#whats-new-in-v040) | [Forms](#forms-and-subtypes) | [Providers](#supported-providers) | [CLI](#cli-reference) | [UI](#web-ui) | [Python API](#python-api)
 
 </div>
 
 ---
 
-## What's New in v0.3.3
+## What's New in v0.4.0
 
-- README and UI copy now match the current category/subtype model used by the CLI and agent.
-- Version bumped to `0.3.3`.
-- Docs now reflect the current zero-config auth paths: Claude Code, Gemini CLI, `gcloud` ADC, OpenAI Codex CLI, and Aider.
-- README now documents the current generation stack: 13 routed skills, 15 generation tools, the graphics toolkit, and PDF figure/table extraction utilities.
+- **New `flowchart_pro` form**: draw.io-quality interactive architecture diagrams powered by Cytoscape.js 3.30.2 + dagre layout. Compound nodes, zoom/pan/export, click-to-inspect detail panels, step-by-step walkthrough.
+- **Vector figure extraction**: `extract_pdf_page` now defaults to SVG output (via PyMuPDF `get_svg_image`) for crisp, resolution-independent paper figures.
+- **Quality improvements**: all 6 core output forms benchmarked at an average 9.4/10 (website 9.1, presentation 9.75, flowchart 9.8, latex 9.1, slides 8.8, app 9.5).
+- **Bug fixes**: resolved f-string `{slug}` NameError, Gradio version pinned to `>=6.0`, XSS guard added to app form, `textcomp` LaTeX package added for `\texttimes` support.
 
 ---
 
@@ -82,12 +82,12 @@ pipx run paper-demo-agent ui
 
 ## What It Does
 
-Paper Demo Agent reads a paper, classifies its contribution, routes it to a specialized skill, and generates one of 10 output formats across 4 top-level categories:
+Paper Demo Agent reads a paper, classifies its contribution, routes it to a specialized skill, and generates one of 11 output formats across 4 top-level categories:
 
 - `app`: Gradio or Streamlit
 - `presentation`: HTML slides, PowerPoint, or LaTeX/Beamer
 - `page`: project page, README, or blog article
-- `diagram`: Mermaid or Graphviz
+- `diagram`: Mermaid, Cytoscape.js (draw.io-quality), or Graphviz
 
 Current repo highlights:
 
@@ -107,12 +107,13 @@ Current repo highlights:
 4. Run the generation loop: Research, Build, Polish, Validate.
 5. Return runnable output under `demos/` by default.
 
-The generator uses form-specific budgets. Current defaults in code include:
+The generator uses form-specific budgets. Current defaults:
 
-- `presentation`: build 15, polish 3
-- `website`, `app`, `app_streamlit`: build 12, polish 3
-- `page_blog`, `slides`, `latex`: build 14, polish 3
-- `flowchart`: build 8, polish 2
+- `presentation`: build 18, polish 5
+- `website`, `page_blog`, `slides`, `latex`: build 14–16, polish 4
+- `app`, `app_streamlit`: build 14, polish 4
+- `flowchart_pro`: build 12, polish 3
+- `flowchart`: build 10, polish 3
 - `page_readme`, `diagram_graphviz`: build 6, polish 2
 
 ---
@@ -126,7 +127,7 @@ Preferred CLI usage is category + subtype:
 | `app` | `gradio`, `streamlit` | `app.py` |
 | `presentation` | `revealjs`, `pptx`, `beamer` | `demo.html`, `build.py`, `presentation.tex` |
 | `page` | `project`, `readme`, `blog` | `index.html`, `README.md` |
-| `diagram` | `mermaid`, `graphviz` | `index.html`, `build.py` |
+| `diagram` | `mermaid`, `cytoscape`, `graphviz` | `index.html`, `build.py` |
 
 Examples:
 
@@ -139,15 +140,19 @@ paper-demo-agent demo 1706.03762 --form page --subtype project
 paper-demo-agent demo 1706.03762 --form page --subtype readme
 paper-demo-agent demo 1706.03762 --form page --subtype blog
 paper-demo-agent demo 1706.03762 --form diagram --subtype mermaid
+paper-demo-agent demo 1706.03762 --form diagram --subtype cytoscape
 paper-demo-agent demo 1706.03762 --form diagram --subtype graphviz
 ```
 
-Legacy flat aliases are still accepted for compatibility:
+Or use flat form keys directly:
 
-- `website` = `page/project`
-- `slides` = `presentation/pptx`
-- `latex` = `presentation/beamer`
-- `flowchart` = `diagram/mermaid`
+```bash
+paper-demo-agent demo 1706.03762 --form flowchart        # Mermaid.js interactive diagram
+paper-demo-agent demo 1706.03762 --form flowchart_pro    # Cytoscape.js draw.io-quality diagram
+paper-demo-agent demo 1706.03762 --form website          # Project page (alias for page/project)
+paper-demo-agent demo 1706.03762 --form slides           # PowerPoint (alias for presentation/pptx)
+paper-demo-agent demo 1706.03762 --form latex            # LaTeX/Beamer (alias for presentation/beamer)
+```
 
 ---
 

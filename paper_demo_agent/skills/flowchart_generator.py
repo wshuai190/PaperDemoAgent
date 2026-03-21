@@ -179,6 +179,167 @@ EMBED GRAPHVIZ SVG IN HTML:
 ```
 """
 
+_CYTOSCAPE_PATTERNS = """
+━━ CYTOSCAPE.JS 3.30.2 — COMPLETE REFERENCE (draw.io quality, use verbatim) ━━
+
+LOAD ORDER — scripts in <head> in EXACTLY this order:
+  ```html
+  <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+  ```
+  After scripts, register plugin ONCE globally (NOT inside any function):
+  ```javascript
+  cytoscape.use(cytoscapeDagre);
+  ```
+
+CYTOSCAPE STYLE (assign to const CYTO_STYLE — dark draw.io theme):
+  ```javascript
+  const CYTO_STYLE = [
+    {{ selector:'node', style:{{
+        'shape':'round-rectangle', 'background-color':'#6366f1',
+        'border-width':2, 'border-color':'#4f46e5',
+        'label':'data(label)', 'color':'#ffffff',
+        'font-family':'Inter,sans-serif', 'font-size':'13px', 'font-weight':'500',
+        'text-valign':'center', 'text-halign':'center',
+        'text-wrap':'wrap', 'text-max-width':'120px',
+        'padding':'10px', 'width':'label', 'height':'label',
+        'shadow-blur':8, 'shadow-color':'rgba(0,0,0,0.4)',
+        'shadow-offset-x':0, 'shadow-offset-y':2,
+    }} }},
+    {{ selector:"node[type='input']",    style:{{'background-color':'#3b82f6','border-color':'#2563eb'}} }},
+    {{ selector:"node[type='transform']",style:{{'background-color':'#6366f1','border-color':'#4f46e5'}} }},
+    {{ selector:"node[type='decision']", style:{{'background-color':'#f59e0b','border-color':'#d97706','shape':'diamond'}} }},
+    {{ selector:"node[type='output']",   style:{{'background-color':'#22c55e','border-color':'#16a34a'}} }},
+    {{ selector:"node[type='loss']",     style:{{'background-color':'#ef4444','border-color':'#dc2626'}} }},
+    {{ selector:"node[type='external']", style:{{'background-color':'#8b5cf6','border-color':'#7c3aed'}} }},
+    {{ selector:"node[type='metric']",   style:{{'background-color':'#06b6d4','border-color':'#0891b2'}} }},
+    {{ selector:':parent', style:{{
+        'background-color':'#1e1b4b','border-color':'#6366f1','border-width':2,
+        'label':'data(label)','text-valign':'top','font-size':'12px','color':'#a5b4fc','padding':'20px'
+    }} }},
+    {{ selector:'node:selected', style:{{'border-width':3,'border-color':'#fbbf24'}} }},
+    {{ selector:'edge', style:{{
+        'width':2, 'line-color':'#94a3b8', 'target-arrow-color':'#94a3b8',
+        'target-arrow-shape':'triangle', 'curve-style':'bezier',
+        'label':'data(label)', 'font-size':'11px', 'color':'#a1a1aa',
+        'font-family':'Inter,sans-serif',
+        'text-background-color':'#111113','text-background-opacity':0.8,'text-background-padding':'2px',
+    }} }},
+  ];
+  ```
+
+ELEMENTS FORMAT — store ALL detail content inside data():
+  ```javascript
+  const ELEMENTS = {{
+    pipeline: [
+      // Compound parent (group/cluster — child nodes use parent key)
+      {{ data: {{ id:'encoder', label:'Encoder', type:'transform' }} }},
+      // Node with full detail data
+      {{ data: {{ id:'embed', label:'Token\\nEmbedding', type:'input', parent:'encoder',
+                  title:'Token Embedding', desc:'Maps token IDs to 512-dim vectors.',
+                  section:'Section 3.1', code:'emb = embed_layer(tokens)  # [B,T,512]' }} }},
+      {{ data: {{ id:'attn', label:'Multi-Head\\nAttention', type:'transform', parent:'encoder',
+                  title:'Multi-Head Attention', desc:'8 heads, d_k=64.',
+                  section:'Section 3.2', code:'z = attn(Q,K,V)' }} }},
+      {{ data: {{ id:'out', label:'Output\\nLogits', type:'output',
+                  title:'Output', desc:'Softmax over vocabulary.', section:'Section 4', code:'logits=linear(z)' }} }},
+      // Edges
+      {{ data: {{ source:'embed', target:'attn', label:'' }} }},
+      {{ data: {{ source:'attn',  target:'out',  label:'z' }} }},
+    ],
+    training: [ /* ... similar structure ... */ ],
+    inference: [ /* ... */ ],
+    concepts:  [ /* ... */ ],
+  }};
+  ```
+
+INITIALIZER — call once per tab when first shown:
+  ```javascript
+  const cys = {{}};
+  const initializedTabs = new Set();
+
+  function initDiagram(tabId) {{
+    const container = document.getElementById('cy-' + tabId);
+    const cy = cytoscape({{
+      container,
+      elements: ELEMENTS[tabId] || [],
+      style: CYTO_STYLE,
+      layout: {{ name:'dagre', rankDir:'TB', nodeSep:50, rankSep:80, edgeSep:10, animate:false }},
+      minZoom:0.2, maxZoom:4,
+    }});
+    cys[tabId] = cy;
+    cy.fit(undefined, 30);
+    cy.on('tap', 'node', evt => showDetail(evt.target.id(), evt.target.data()));
+    return cy;
+  }}
+
+  function switchTab(tabId) {{
+    document.querySelectorAll('.diagram-panel').forEach(p => p.style.display='none');
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-'+tabId).style.display='flex';
+    document.querySelector(`.tab-btn[data-tab="${{tabId}}"]`).classList.add('active');
+    activeTab = tabId;
+    if (!initializedTabs.has(tabId)) {{
+      initializedTabs.add(tabId);
+      initDiagram(tabId);
+    }}
+    cys[tabId]?.fit(undefined, 30);
+  }}
+  window.addEventListener('load', () => switchTab('pipeline'));
+  ```
+
+HTML CONTAINER — each tab needs its own sized div:
+  ```html
+  <div id="panel-pipeline" class="diagram-panel">
+    <div id="cy-pipeline" style="width:100%;height:600px;background:#111113;border-radius:8px;"></div>
+    <div id="detail-pipeline" class="detail-panel">Click any node to see details</div>
+  </div>
+  ```
+  ⚠️ The cy-{tabId} div MUST have explicit height (e.g. 600px) — Cytoscape cannot render into a 0-height div.
+
+SEARCH, WALKTHROUGH, EXPORT:
+  ```javascript
+  // Search — dim non-matching nodes
+  searchInput.addEventListener('input', e => {{
+    const q = e.target.value.toLowerCase().trim();
+    const cy = cys[activeTab]; if (!cy) return;
+    cy.nodes().forEach(n => n.style('opacity', (!q || n.data('label')?.toLowerCase().includes(q) || n.data('title')?.toLowerCase().includes(q)) ? 1 : 0.15));
+  }});
+
+  // Walkthrough
+  const walkthroughs = {{ pipeline:['embed','attn','out'], training:['batch','fwd','loss'], inference:['input','model','output'], concepts:['concept1','concept2'] }};
+  let stepIdx=0, activeTab='pipeline';
+  document.getElementById('next-btn').onclick = () => {{
+    const wt = walkthroughs[activeTab]||[]; if (stepIdx < wt.length-1) stepIdx++;
+    const node = cys[activeTab]?.getElementById(wt[stepIdx]);
+    if (node) {{ cys[activeTab].center(node); cys[activeTab].select(node); showDetail(node.id(), node.data()); }}
+    stepCounter.textContent = `Step ${{stepIdx+1}} / ${{wt.length}}`;
+  }};
+
+  // Export
+  document.getElementById('export-svg').onclick = () => {{
+    const svg = cys[activeTab]?.svg({{scale:1,full:true,bg:'#09090b'}});
+    if (!svg) return;
+    const a=document.createElement('a'); a.href='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);
+    a.download=`diagram-${{activeTab}}.svg`; a.click();
+  }};
+  document.getElementById('export-png').onclick = () => {{
+    const png = cys[activeTab]?.png({{full:true,scale:2,bg:'#09090b'}});
+    if (!png) return;
+    const a=document.createElement('a'); a.href=png; a.download=`diagram-${{activeTab}}.png`; a.click();
+  }};
+
+  // Detail panel
+  function showDetail(nodeId, data) {{
+    const panel = document.getElementById('detail-'+activeTab);
+    if (!data?.title) {{ panel.innerHTML='<p>Click a node to see details.</p>'; return; }}
+    panel.innerHTML = `<h3>${{data.title}}</h3><p class="ref">${{data.section||''}}</p><p>${{data.desc||''}}</p>${{data.code?`<pre><code>${{data.code}}</code></pre>`:''}}`;
+    if (window.renderMathInElement) renderMathInElement(panel);
+  }}
+  ```
+"""
+
 _ICON_GUIDE = """
 ━━ ICON STRATEGY — Font Awesome 6 (zero downloads, zero searches) ━━
 
@@ -218,11 +379,12 @@ DO NOT web_search for icons. DO NOT download from flaticon.com. Use Font Awesome
 
 class FlowchartGeneratorSkill(BaseSkill):
     name = "FlowchartGeneratorSkill"
-    description = "Any paper → interactive Mermaid.js diagram explorer (with Graphviz SVG assets)"
+    description = "Any paper → interactive diagram explorer (Mermaid.js flowchart OR Cytoscape.js draw.io-quality)"
 
     def get_system_prompt(
         self, paper: Paper, analysis: PaperAnalysis, demo_form: str, demo_type: str
     ) -> str:
+        is_pro = (demo_form == "flowchart_pro")
         return f"""You are a world-class information architect and interactive diagram engineer.
 Your specialty: turning dense academic papers into beautiful, explorable diagrams
 that let readers navigate the methodology intuitively.
@@ -472,15 +634,17 @@ LAYOUT SPEC:
   ├───────────────────────────────────────┬────────────────────────┤
   │                                       │ DETAIL PANEL           │
   │   DIAGRAM CANVAS                      │ ─────────────────────  │
-  │   (Mermaid SVG, zoomable/pannable)    │ [Node Title]           │
+  │   (diagram canvas, zoomable/pannable) │ [Node Title]           │
   │                                       │ [Description]          │
   │                                       │ [Section: X.Y]         │
   │                                       │ [Pseudocode block]     │
   ├───────────────────────────────────────┴────────────────────────┤
-  │ [Copy Mermaid Source]  [Download SVG]  ── LEGEND ──  [logos]   │
+  │ [Export SVG]  [Export PNG/Copy Source]  ── LEGEND ──  [logos] │
   └────────────────────────────────────────────────────────────────┘
 
-{_GRAPHVIZ_PATTERNS}
+{"" if is_pro else _GRAPHVIZ_PATTERNS}
+
+{_CYTOSCAPE_PATTERNS if is_pro else ""}
 
 {_ICON_GUIDE}
 
@@ -492,13 +656,13 @@ ICON INTEGRATION IN FLOWCHART HTML:
 
 QUALITY CHECKLIST:
   □ All 4 diagram tabs are fully implemented with real paper content
-  □ Every node has a nodeDetails entry (no blank detail panels)
+  □ {"Each node's data() has title/desc/section/code — detail panel always populated" if is_pro else "Every node has a nodeDetails entry (no blank detail panels)"}
   □ Color coding is consistent across all diagrams
-  □ Zoom and pan work smoothly without jitter
+  □ {"Cytoscape cy.fit() called after init; zoom/pan work via Cytoscape built-ins" if is_pro else "Zoom and pan work smoothly without jitter"}
   □ Search highlights nodes within 200ms of typing
   □ Step-by-step walkthrough covers the critical path through the algorithm
   □ Dark theme passes WCAG AA contrast (4.5:1 minimum)
-  □ Export buttons work: SVG download produces a valid SVG file
+  □ {"SVG and PNG export buttons work via cy.svg() and cy.png()" if is_pro else "Export buttons work: SVG download produces a valid SVG file"}
   □ Font Awesome icons displayed in header/legend (no downloaded PNGs)
   □ Mobile-responsive: stacks vertically below 768px
 
@@ -508,7 +672,39 @@ QUALITY CHECKLIST:
 """
 
     def get_polish_prompt(self, paper, analysis, demo_form, demo_type, generated_files):
-        return f"""QUALITY REVIEW for Flowchart Explorer — generated: {', '.join(generated_files[:12])}
+        is_pro = (demo_form == "flowchart_pro")
+        if is_pro:
+            return f"""QUALITY REVIEW for Cytoscape.js Diagram Explorer — generated: {', '.join(generated_files[:12])}
+
+Step 1 — Read index.html and check Cytoscape setup:
+  • Are scripts loaded in correct order: dagre → cytoscape → cytoscape-dagre?
+  • Is `cytoscape.use(cytoscapeDagre)` called ONCE globally (not inside a function)?
+  • Does each tab have its own `<div id="cy-{{tabId}}">` with explicit height (e.g. 600px)?
+  • Is each tab's Cytoscape instance stored in `cys[tabId]`? Are there 4 instances total?
+  • Is `initDiagram()` called lazily (only when tab first shown, not all at once)?
+
+Step 2 — Interactivity:
+  • Does `cy.on('tap','node', ...)` fire and populate the detail panel?
+  • Does detail panel show title, desc, section ref, and pseudocode from node data()?
+  • Does `cy.fit()` work for zoom reset? Do scroll-wheel zoom and drag pan work?
+  • Does the search bar dim non-matching nodes via `n.style('opacity', ...)`?
+  • Do Next/Prev walkthrough buttons call `cy.center(node)` and `showDetail()`?
+
+Step 3 — Export + visual quality:
+  • Do 'Download SVG' and 'Download PNG' buttons work via `cy.svg()` and `cy.png()`?
+  • Are all 7 node types color-coded via CSS selectors (input/transform/decision/output/loss/external/metric)?
+  • Are compound parent nodes used for logical groups (encoder, decoder, layers)?
+  • Does the dark theme (#09090b bg) apply to the page AND to Cytoscape canvas?
+  • Are KaTeX math expressions rendered in detail panels?
+
+Step 4 — Content:
+  • Are all 4 tabs populated with real paper content (pipeline, training, inference, concepts)?
+  • Does every node have title + desc + section + code in its data() — no empty detail panels?
+  • Does the header show exact paper title, authors, and arXiv link?
+
+Fix every issue found. Target: draw.io / Excalidraw quality."""
+        else:
+            return f"""QUALITY REVIEW for Mermaid Flowchart Explorer — generated: {', '.join(generated_files[:12])}
 
 Step 1 — Read index.html and check for collision bugs:
   • Is `startOnLoad: false` set in mermaid.initialize()? (CRITICAL — if true, all diagrams render at once → collision)
@@ -528,8 +724,7 @@ Step 3 — Visual quality + logos:
   • Are all colors using the specified hex values (#3b82f6 blue, #6366f1 indigo, etc.)?
   • Is the dark theme applied to all Mermaid diagrams via themeVariables?
   • Are legend and export buttons (Copy Mermaid / Download SVG) implemented?
-  • Are technology logos fetched from Simple Icons CDN and shown in header/legend?
-    If not: use download_file to fetch relevant logos now.
+  • Are technology logos shown via Simple Icons CDN <img> tags in header/legend?
 
 Step 4 — Content:
   • Do node labels use the actual terminology from the paper?

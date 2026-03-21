@@ -14,7 +14,7 @@ CATEGORY_SUBTYPES: Dict[str, List[str]] = {
     "app":          ["gradio", "streamlit"],
     "presentation": ["revealjs", "beamer", "pptx"],
     "page":         ["project", "readme", "blog"],
-    "diagram":      ["mermaid", "graphviz"],
+    "diagram":      ["mermaid", "graphviz", "cytoscape"],
 }
 
 CATEGORY_DEFAULTS: Dict[str, str] = {
@@ -36,6 +36,7 @@ COMPOSITE_KEY: Dict[tuple, str] = {
     ("page", "blog"):             "page_blog",
     ("diagram", "mermaid"):       "flowchart",
     ("diagram", "graphviz"):      "diagram_graphviz",
+    ("diagram", "cytoscape"):     "flowchart_pro",
 }
 
 

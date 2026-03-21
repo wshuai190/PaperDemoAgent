@@ -198,3 +198,34 @@
 1. **Orphaned tool_use IDs on forced-write**: The "search limit → force write" nudge can create unpaired tool_use/tool_result pairs → API 400 crash
 2. **Build timeout**: 15 build iterations × ~30s each ≈ 7.5 min, exceeds 5-min cron limit; consider reducing default budget or adding early exit when main file is done
 3. **`--form website` not a valid CLI option**: Either add it as alias for `page`, or update docs/tests that reference it
+
+---
+
+## Session 5 — 2026-03-21 (Brisbane) — v0.4.0: flowchart_pro + vector figures
+
+### New form: `flowchart_pro` (Cytoscape.js draw.io-quality diagrams)
+- Added `flowchart_pro` as a 7th demo form alongside the existing 6
+- Technology: Cytoscape.js 3.30.2 + dagre layout (same engine draw.io uses for hierarchical layout)
+- `FlowchartGeneratorSkill` extended with `_CYTOSCAPE_PATTERNS` (~150 lines of reference patterns):
+  - CDN load order: dagre → cytoscape → cytoscape-dagre
+  - Tab isolation: each tab has its own `<div id="cy-{tabId}">` container initialized lazily on first show
+  - Node/edge JSON declaration, dark-theme stylesheet, compound parent nodes
+  - Click handler, zoom/fit, search, walkthrough, SVG/PNG export
+  - `get_polish_prompt()` has separate Mermaid vs Cytoscape review checklists
+- Full routing wired across all 5 relevant files:
+  - `paper/models.py`: `("diagram", "cytoscape") → "flowchart_pro"` in COMPOSITE_KEY
+  - `skills/router.py`: FlowchartGeneratorSkill locked to `{flowchart, flowchart_pro}`
+  - `generation/generator.py`: detect_main_file candidates, form compliance check (validates `cytoscape` in HTML), FORM_BUDGETS (build=12, polish=3)
+  - `cli.py`: `flowchart_pro` added to click.Choice
+  - `ui/app.py`: `"Interactive (Cytoscape)"` in DIAGRAM_OPTIONS + DIAGRAM_META + _resolve_form_type + open-browser message
+
+### Vector figure extraction
+- `tools.py`: `extract_pdf_page` now defaults to `format="svg"` using PyMuPDF `page.get_svg_image()`
+- SVG crop implemented via `viewBox` injection
+- PNG DPI raised from 150 → 300 for fallback raster mode
+
+### Tests
+- **236/236 passing** — all existing tests pass with new changes
+
+### Version bump
+- `0.3.3` → `0.4.0` in `pyproject.toml` and `paper_demo_agent/__init__.py`

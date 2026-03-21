@@ -47,7 +47,7 @@ class SkillRouter:
 
     # Skills that are form-specific and should NOT be used for other forms
     _FORM_LOCKED_SKILLS = {
-        "FlowchartGeneratorSkill": {"flowchart"},
+        "FlowchartGeneratorSkill": {"flowchart", "flowchart_pro"},
         "GraphvizDiagramSkill":    {"diagram_graphviz"},
         "StreamlitDemoSkill":      {"app_streamlit"},
         "ReadmeGeneratorSkill":    {"page_readme"},
@@ -61,6 +61,7 @@ class SkillRouter:
         "app_streamlit":    "StreamlitDemoSkill",
         "presentation":     "AlgorithmVisualizerSkill",
         "flowchart":        "FlowchartGeneratorSkill",
+        "flowchart_pro":    "FlowchartGeneratorSkill",
         "slides":           "TheoreticalExplainerSkill",
         "latex":            "TheoreticalExplainerSkill",
         "page_readme":      "ReadmeGeneratorSkill",
@@ -78,7 +79,7 @@ class SkillRouter:
         form = demo_form or analysis.demo_form
 
         # Form-locked forms: always use their designated skill regardless of paper type
-        if form == "flowchart":
+        if form in ("flowchart", "flowchart_pro"):
             return self._registry["FlowchartGeneratorSkill"]()
         if form == "diagram_graphviz":
             return self._registry["GraphvizDiagramSkill"]()

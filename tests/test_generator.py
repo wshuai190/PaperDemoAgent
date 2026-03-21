@@ -269,6 +269,7 @@ class TestGenerator:
 
         gradio_content = "import gradio as gr\napp = gr.Interface(lambda x: x, 'text', 'text')\napp.launch()"
         # Phase order: research(end_turn) → build(write_file, end_turn) → polish(end_turn)
+        # + autofix(end_turn) triggered by paper-title content check
         provider.chat.side_effect = [
             LLMResponse(content="Research done.", tool_calls=[], stop_reason="end_turn"),
             LLMResponse(
@@ -282,6 +283,7 @@ class TestGenerator:
             ),
             LLMResponse(content="Done!", tool_calls=[], stop_reason="end_turn"),
             LLMResponse(content="Looks good.", tool_calls=[], stop_reason="end_turn"),
+            LLMResponse(content="Fixed title.", tool_calls=[], stop_reason="end_turn"),
         ]
 
         skill = GeneralQASkill()

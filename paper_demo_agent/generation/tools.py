@@ -149,11 +149,13 @@ TOOLS: List[Dict] = [
     {
         "name": "extract_pdf_page",
         "description": (
-            "Render a page from the paper's PDF as a PNG image and save it to the output directory. "
+            "Render a page from the paper's PDF as a high-quality image and save it to the output directory. "
             "Use this to extract figures, result tables, architecture diagrams, and charts from the paper "
             "to embed directly in slides or presentations. "
+            "Supports SVG format (vector, infinitely scalable, ideal for HTML) or PNG (raster, for pptx/LaTeX). "
             "Supports cropping to a sub-region using relative coordinates (0.0 = top/left, 1.0 = bottom/right). "
-            "The paper PDF is automatically available as 'paper.pdf' in the output directory."
+            "The paper PDF is automatically available as 'paper.pdf' in the output directory. "
+            "PREFER format='svg' for HTML outputs — it gives crisp vector quality at any zoom level."
         ),
         "parameters": {
             "type": "object",
@@ -162,9 +164,14 @@ TOOLS: List[Dict] = [
                     "type": "integer",
                     "description": "Page number (1-indexed)",
                 },
+                "format": {
+                    "type": "string",
+                    "enum": ["svg", "png"],
+                    "description": "Output format: 'svg' (vector, best for HTML — default) or 'png' (raster, for pptx/LaTeX). SVG gives perfect quality at any size.",
+                },
                 "dpi": {
                     "type": "integer",
-                    "description": "Resolution in DPI (default: 150; use 200+ for high quality)",
+                    "description": "Resolution in DPI for PNG only (default: 300; ignored for SVG)",
                 },
                 "crop": {
                     "type": "object",
@@ -182,7 +189,7 @@ TOOLS: List[Dict] = [
                 },
                 "filename": {
                     "type": "string",
-                    "description": "Output filename (default: figures/page_{page}.png)",
+                    "description": "Output filename (default: figures/page_{page}.svg or .png depending on format)",
                 },
             },
             "required": ["page"],
@@ -363,17 +370,25 @@ _WRITE_FILE_MAX_LINES = 300  # soft threshold for warnings only
 
 def tool_write_file(output_dir: str, path: str, content: str) -> str:
     line_count = content.count("\n") + 1
-    filename = Path(path).name
-
-    # No hard limit — just write the file. The real safeguard is max_tokens
-    # in the API call (8192 early iterations, 16384 later). If the model
-    # tries to write too much, the API response gets truncated and the
-    # tool call fails with "Missing required argument: content" — which is
-    # caught and retried with a split strategy hint.
     target = _safe_path(output_dir, path)
+
+    # Size regression guard: if overwriting a file that already exists and is
+    # significantly larger, warn the model so it knows it may have dropped content.
+    regression_warning = ""
+    if target.exists():
+        prev_size = target.stat().st_size
+        new_size = len(content.encode("utf-8"))
+        if prev_size > 5000 and new_size < prev_size * 0.6:
+            regression_warning = (
+                f"\n⚠️ SIZE REGRESSION: previous version was {prev_size // 1024}KB, "
+                f"new version is {new_size // 1024}KB "
+                f"({int(new_size / prev_size * 100)}% of original). "
+                f"If you removed content unintentionally, use append_file to restore it."
+            )
+
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
-    return f"Written {len(content)} bytes to {path} ({line_count} lines)"
+    return f"Written {len(content)} bytes to {path} ({line_count} lines){regression_warning}"
 
 
 def tool_read_file(output_dir: str, path: str) -> str:
@@ -395,10 +410,10 @@ def tool_append_file(output_dir: str, path: str, content: str) -> str:
     existing = target.read_text(encoding="utf-8")
     combined = existing + content
     combined_lines = combined.count("\n") + 1
-    if combined_lines > 1200:
+    if combined_lines > 3000:
         return (
-            f"ERROR: Combined file would be {combined_lines} lines (max 1200). "
-            f"The file is getting too large."
+            f"ERROR: Combined file would be {combined_lines} lines (max 3000). "
+            f"The file is getting too large. Split into separate files."
         )
     target.write_text(combined, encoding="utf-8")
     return f"Appended {len(content)} bytes to {path} (total: {len(combined)} bytes, {combined_lines} lines)"
@@ -513,11 +528,12 @@ def tool_execute_python(code: str, output_dir: Optional[str] = None) -> str:
 def tool_extract_pdf_page(
     output_dir: str,
     page: int,
-    dpi: int = 150,
+    fmt: str = "svg",
+    dpi: int = 300,
     crop: Optional[Dict[str, float]] = None,
     filename: Optional[str] = None,
 ) -> str:
-    """Render a PDF page (or cropped region) as PNG for use in slides."""
+    """Render a PDF page (or cropped region) as SVG (vector) or PNG for use in slides."""
     try:
         import fitz  # PyMuPDF
     except ImportError:
@@ -538,8 +554,8 @@ def tool_extract_pdf_page(
             return f"Error: page {page} out of range (paper has {total_pages} pages, 1-indexed)"
 
         pg = doc[page - 1]
-        mat = fitz.Matrix(dpi / 72, dpi / 72)
 
+        crop_note = ""
         if crop:
             rect = pg.rect
             w, h = rect.width, rect.height
@@ -549,21 +565,49 @@ def tool_extract_pdf_page(
                 crop.get("x1", 1.0) * w,
                 crop.get("y1", 1.0) * h,
             )
-            pix = pg.get_pixmap(matrix=mat, clip=clip)
+            crop_note = f" [cropped: x0={crop['x0']:.2f} y0={crop['y0']:.2f} x1={crop['x1']:.2f} y1={crop['y1']:.2f}]"
         else:
-            pix = pg.get_pixmap(matrix=mat)
+            clip = None
 
-        out_filename = filename or f"figures/page_{page}.png"
-        target = _safe_path(output_dir, out_filename)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        pix.save(str(target))
+        if fmt == "svg":
+            # Vector SVG — perfect quality at any zoom, ideal for HTML embedding
+            svg_text = pg.get_svg_image(matrix=fitz.Identity)
+            if clip is not None:
+                # Re-render only the cropped region by adjusting the SVG viewBox
+                # Extract page dimensions and apply clip as a viewBox crop
+                rect = pg.rect
+                w, h = rect.width, rect.height
+                vx = clip.x0
+                vy = clip.y0
+                vw = clip.x1 - clip.x0
+                vh = clip.y1 - clip.y0
+                # Inject viewBox on the root <svg> element to crop the rendered output
+                svg_text = svg_text.replace(
+                    "<svg ",
+                    f'<svg viewBox="{vx:.2f} {vy:.2f} {vw:.2f} {vh:.2f}" ',
+                    1,
+                )
+            out_filename = filename or f"figures/page_{page}.svg"
+            target = _safe_path(output_dir, out_filename)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(svg_text, encoding="utf-8")
+            size_kb = len(svg_text.encode("utf-8")) // 1024
+            return f"Saved {out_filename} (SVG vector, {size_kb}KB{crop_note}) — embed with <img src='{out_filename}'> or inline <svg>"
 
-        size_str = f"{pix.width}×{pix.height}px"
-        crop_note = (
-            f" [cropped: x0={crop['x0']:.2f} y0={crop['y0']:.2f} x1={crop['x1']:.2f} y1={crop['y1']:.2f}]"
-            if crop else ""
-        )
-        return f"Saved {out_filename} ({size_str}{crop_note})"
+        else:
+            # PNG raster at high DPI
+            mat = fitz.Matrix(dpi / 72, dpi / 72)
+            if clip is not None:
+                pix = pg.get_pixmap(matrix=mat, clip=clip)
+            else:
+                pix = pg.get_pixmap(matrix=mat)
+            out_filename = filename or f"figures/page_{page}.png"
+            target = _safe_path(output_dir, out_filename)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            pix.save(str(target))
+            size_str = f"{pix.width}×{pix.height}px"
+            return f"Saved {out_filename} ({size_str}, {dpi}dpi{crop_note})"
+
     except Exception as e:
         return f"extract_pdf_page error: {e}"
 
@@ -1070,7 +1114,8 @@ def dispatch_tool(tool_name: str, arguments: Dict[str, Any], output_dir: str) ->
             return tool_extract_pdf_page(
                 output_dir,
                 page=int(arguments["page"]),
-                dpi=int(arguments.get("dpi", 150)),
+                fmt=arguments.get("format", "svg"),
+                dpi=int(arguments.get("dpi", 300)),
                 crop=arguments.get("crop"),
                 filename=arguments.get("filename"),
             )

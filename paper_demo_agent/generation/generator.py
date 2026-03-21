@@ -149,6 +149,7 @@ def _detect_main_file(output_dir: str, demo_form: str) -> str:
         "presentation":     ["demo.html", "slides.html", "index.html"],
         "website":          ["index.html", "demo.html"],
         "flowchart":        ["index.html", "diagram.html", "flowchart.html"],
+        "flowchart_pro":    ["index.html", "diagram.html", "flowchart.html"],
         "slides":           ["build.py", "generate.py", "presentation.pptx"],
         "latex":            ["presentation.tex", "slides.tex", "talk.tex"],
         "page_readme":      ["README.md", "readme.md"],
@@ -298,12 +299,21 @@ def _validate_form_output(output_dir: str, demo_form: str) -> tuple[bool, str]:
             "demo.html must load reveal.js from CDN and call Reveal.initialize()."
         )
 
-    elif demo_form in ("website", "flowchart"):
+    elif demo_form in ("website", "flowchart", "flowchart_pro"):
         html_files = [f for f in files if f.suffix == ".html"]
         if not html_files:
             return False, (
                 f"Expected an HTML file (index.html) for {demo_form} but none found. "
                 "You must create index.html."
+            )
+        if demo_form == "flowchart_pro":
+            for f in html_files:
+                content = f.read_text(errors="ignore")
+                if "cytoscape" in content.lower():
+                    return True, ""
+            return False, (
+                f"Generated {[f.name for f in html_files]} but none use Cytoscape.js. "
+                "index.html must load cytoscape.min.js and call cytoscape({{...}})."
             )
         if demo_form == "flowchart":
             for f in html_files:
@@ -957,15 +967,16 @@ def _run_research_phase(
 
 FORM_BUDGETS = {
     "page_readme":      {"build": 6,  "polish": 2},
-    "diagram_graphviz":  {"build": 6,  "polish": 2},
-    "flowchart":        {"build": 8,  "polish": 2},
-    "presentation":     {"build": 15, "polish": 3},
-    "website":          {"build": 12, "polish": 3},
-    "page_blog":        {"build": 14, "polish": 3},
-    "slides":           {"build": 14, "polish": 3},
-    "latex":            {"build": 14, "polish": 3},
-    "app":              {"build": 12, "polish": 3},
-    "app_streamlit":    {"build": 12, "polish": 3},
+    "diagram_graphviz": {"build": 6,  "polish": 2},
+    "flowchart":        {"build": 10, "polish": 3},
+    "flowchart_pro":    {"build": 12, "polish": 3},
+    "presentation":     {"build": 18, "polish": 5},
+    "website":          {"build": 14, "polish": 4},
+    "page_blog":        {"build": 16, "polish": 4},
+    "slides":           {"build": 16, "polish": 4},
+    "latex":            {"build": 16, "polish": 4},
+    "app":              {"build": 14, "polish": 4},
+    "app_streamlit":    {"build": 14, "polish": 4},
 }
 
 # Forms that typically produce large files and benefit from skeleton-first writing
@@ -1046,8 +1057,8 @@ def _compact_messages(messages: list, keep_first: int = 1, keep_last: int = 6) -
         if role == "tool":
             # OpenAI format tool result — truncate content
             truncated = dict(msg)
-            if isinstance(content, str) and len(content) > 100:
-                truncated["content"] = content[:100] + "...[truncated]"
+            if isinstance(content, str) and len(content) > 600:
+                truncated["content"] = content[:600] + f"...[{len(content)-600} chars omitted]"
             compacted.append(truncated)
 
         elif role == "user" and isinstance(content, list):
@@ -1057,8 +1068,8 @@ def _compact_messages(messages: list, keep_first: int = 1, keep_last: int = 6) -
                 if isinstance(block, dict) and block.get("type") == "tool_result":
                     block = dict(block)
                     c = block.get("content", "")
-                    if isinstance(c, str) and len(c) > 100:
-                        block["content"] = c[:100] + "...[truncated]"
+                    if isinstance(c, str) and len(c) > 600:
+                        block["content"] = c[:600] + f"...[{len(c)-600} chars omitted]"
                 new_blocks.append(block)
             compacted.append({**msg, "content": new_blocks})
 
@@ -1067,24 +1078,34 @@ def _compact_messages(messages: list, keep_first: int = 1, keep_last: int = 6) -
             new_blocks = []
             for block in content:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
-                    # Keep id/name for message continuity, but clear bulky input
+                    # Keep id/name and a truncated summary of inputs (helps model recall what it wrote)
+                    orig_input = block.get("input", {})
+                    truncated_input = {
+                        k: (str(v)[:200] + "...") if len(str(v)) > 200 else v
+                        for k, v in orig_input.items()
+                    }
                     new_blocks.append({
                         "type": "tool_use",
                         "id": block.get("id", ""),
                         "name": block.get("name", ""),
-                        "input": {},
+                        "input": truncated_input,
                     })
                 else:
                     new_blocks.append(block)
             compacted.append({**msg, "content": new_blocks})
 
         elif role == "assistant" and "tool_calls" in msg:
-            # OpenAI format — strip function arguments from tool_calls
+            # OpenAI format — truncate function arguments but keep a summary
             stripped = dict(msg)
-            stripped["tool_calls"] = [
-                {**tc, "function": {**tc["function"], "arguments": "{}"}}
-                for tc in msg["tool_calls"]
-            ]
+            new_tool_calls = []
+            for tc in msg["tool_calls"]:
+                orig_args = tc["function"].get("arguments", "{}")
+                if isinstance(orig_args, str) and len(orig_args) > 400:
+                    truncated_args = orig_args[:400] + "...}"
+                else:
+                    truncated_args = orig_args
+                new_tool_calls.append({**tc, "function": {**tc["function"], "arguments": truncated_args}})
+            stripped["tool_calls"] = new_tool_calls
             compacted.append(stripped)
 
         else:
@@ -1120,20 +1141,20 @@ def _run_loop(
         # Context compaction: after every 4 iterations, compact old messages (optimization #2)
         if len(messages) > 20 and iteration > 0 and iteration % 4 == 0:
             before_len = len(messages)
-            messages = _compact_messages(messages, keep_first=1, keep_last=6)
+            messages = _compact_messages(messages, keep_first=1, keep_last=10)
             if len(messages) < before_len:
                 on_emit(f"  ↳ Compacted context: {before_len} → {len(messages)} messages\n")
 
         on_emit(f"  [{phase_label}iter {iteration + 1}] calling model...\n")
-        # Adaptive token budget: early iterations are planning/searching
-        # (8192 is plenty); later iterations write large files and need headroom.
+        # Adaptive token budget: iteration 0 is planning/research (text only, 8192 fine).
+        # From iteration 1 onwards the model writes large files — needs full headroom.
         # Sonnet's max output is 64K tokens; we use 32K for write-heavy iterations.
-        if is_build and iteration < 2:
-            _max_tokens = 8192
-        elif is_build and iteration >= 3:
-            _max_tokens = 32768  # write-heavy: need room for 500+ line files
+        if is_build and iteration == 0:
+            _max_tokens = 8192   # planning / web search only — no file writes expected
+        elif is_build:
+            _max_tokens = 32768  # all write iterations: need room for 500+ line files
         else:
-            _max_tokens = 16384
+            _max_tokens = 16384  # polish / validate phases
         response = _chat_with_retry(
             provider, messages, system, TOOLS, _max_tokens, on_emit
         )
@@ -1329,6 +1350,38 @@ def _run_loop(
     return messages
 
 
+def _check_paper_title_in_output(output_dir: str, paper_title: str, demo_form: str) -> str:
+    """Verify the paper title appears in the main output file.
+    Returns an issue string if missing, empty string if OK.
+    """
+    if not paper_title:
+        return ""
+    spec = FORM_SPECS.get(demo_form, {})
+    main_file = spec.get("main_file", "")
+    if not main_file:
+        return ""
+    main_path = Path(output_dir) / main_file
+    if not main_path.exists():
+        return ""
+    try:
+        content = main_path.read_text(errors="ignore")
+    except OSError:
+        return ""
+    # Check for title presence (case-insensitive, strip punctuation for robustness)
+    title_words = [w.lower() for w in paper_title.split() if len(w) > 3]
+    if not title_words:
+        return ""
+    # At least 60% of significant title words must appear
+    found = sum(1 for w in title_words if w in content.lower())
+    if found < max(1, int(len(title_words) * 0.6)):
+        return (
+            f"Paper title '{paper_title}' does not appear in {main_file}. "
+            f"The output must include the exact paper title. "
+            f"Add it to the header/hero/title section immediately."
+        )
+    return ""
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Main entry point
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1387,7 +1440,7 @@ def generate(
             output_dir=output_dir,
             use_openai_fmt=use_oai,
             on_emit=_emit,
-            max_iter=2,  # capped at 2 — avoids token waste on search loops
+            max_iter=4,  # 4 iters: finds official links + foundational prior work
         )
 
         # ── Phase 1b: Figure Pre-extraction (forms that embed PDF figures) ───
@@ -1405,7 +1458,7 @@ def generate(
         if research_notes.strip():
             initial += (
                 "\n\n─── RESEARCH FINDINGS (Phase 1) — OFFICIAL LINKS & PRIOR WORK CONTEXT ───\n"
-                + research_notes[:12000]
+                + research_notes[:18000]
                 + "\n─── END RESEARCH ───"
             )
         if pdf_survey:
@@ -1473,6 +1526,10 @@ def generate(
         # ── Post-Polish: Auto-Validation (HTML/JS/Python quality) ────────
         _emit("\n━━ Post-Polish Validation ━━\n")
         val_issues = _auto_validate_files(output_dir, form)
+        # Also check paper title appears in output
+        title_issue = _check_paper_title_in_output(output_dir, paper.title or "", form)
+        if title_issue and title_issue not in val_issues:
+            val_issues = (val_issues + "\n\n" + title_issue).strip() if val_issues else title_issue
         if val_issues:
             _emit(f"  ⚠ Validation issues found — requesting auto-fix...\n")
             autofix_msg = (

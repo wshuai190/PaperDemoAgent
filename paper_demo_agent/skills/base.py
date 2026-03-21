@@ -17,7 +17,7 @@ FORM_SPECS: dict[str, dict] = {
         "main_file": "app.py",
         "technology": "Gradio 5 (Python)",
         "description": "Interactive Python web app — HuggingFace Spaces quality",
-        "stack": ["gradio>=5.0", "Python 3.10+"],
+        "stack": ["gradio>=6.0", "Python 3.10+"],
         "cdns": [],
         "must": [
             "Create `app.py` as the main file; first import must be `import gradio as gr`",
@@ -39,6 +39,7 @@ FORM_SPECS: dict[str, dict] = {
             "Do NOT use deprecated `gr.Interface()` as root — always `gr.Blocks()`",
             "Do NOT hardcode model weights — load from HuggingFace Hub with `from_pretrained()`",
             "Do NOT use low-contrast annotation colors (e.g., gray text on light backgrounds) for key labels or chart callouts",
+            "Do NOT inject user-provided text directly into HTML strings — use `html.escape(text)` to prevent XSS",
         ],
         "quality_bar": "HuggingFace Spaces featured demos",
     },
@@ -58,7 +59,7 @@ FORM_SPECS: dict[str, dict] = {
             "https://unpkg.com/reveal.js@5.2.1/plugin/notes/notes.js",
         ],
         "must": [
-            "Create `demo.html` — one fully self-contained file, no external local assets",
+            "Create `demo.html` — one fully self-contained file. For PDF figures: embed with `<img src='figures/figN.png'>` (the figures/ dir is in same directory). For custom graphics: use INLINE `<svg>` blocks — never `<img src='...' >` pointing to non-existent local paths",
             "Load reveal.js 5.2.1 from the exact CDN URLs listed above — never change versions",
             "Call `Reveal.initialize({ hash:true, transition:'slide', transitionSpeed:'fast', plugins:[RevealHighlight, RevealMath.KaTeX, RevealNotes] })`",
             "Build >=14 slides: Title, Motivation, Background, Method Overview, Method Detail x2-3, Key Results, Ablation, Demo Placeholder, Comparison, Limitations, Conclusion, Q&A",
@@ -149,14 +150,60 @@ FORM_SPECS: dict[str, dict] = {
             "Export buttons per diagram: 'Copy Mermaid Source' (clipboard) and 'Download SVG'",
             "Header with paper title, authors, arXiv link, and one-line description",
             "Legend panel explaining color-coding conventions",
+            "Load KaTeX 0.16.11 (CSS + JS from CDN) and call `renderMathInElement(document.body)` for math in detail panels",
+            "ML brand logos: use `<img src='https://cdn.simpleicons.org/{slug}/ffffff'>` INLINE in HTML — do NOT download to local files. Slugs: pytorch, tensorflow, huggingface, numpy, wandb, github",
         ],
         "forbidden": [
             "Do NOT use React Flow — it requires a build step",
             "Do NOT produce only static images — all diagrams must be interactive",
             "Do NOT create app.py or Python files as the primary output",
             "Do NOT use `<script src='mermaid.min.js'>` — use the ESM import syntax only",
+            "Do NOT download logo SVGs to local files — use CDN src URLs directly in <img> tags",
         ],
         "quality_bar": "Netron app / NN-SVG / interactive GitHub architecture diagrams",
+    },
+
+    "flowchart_pro": {
+        "main_file": "index.html",
+        "technology": "Interactive HTML diagram — Cytoscape.js 3.30.2 + dagre layout (draw.io quality)",
+        "description": "Professional draw.io-quality interactive diagram explorer with compound groups, SVG/PNG export",
+        "stack": ["Cytoscape.js 3.30.2", "cytoscape-dagre 2.5.0", "dagre 0.8.5", "KaTeX 0.16.11", "Inter font"],
+        "cdns": [
+            "https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js           (load FIRST — required by cytoscape-dagre)",
+            "https://cdn.jsdelivr.net/npm/cytoscape@3.30.2/dist/cytoscape.min.js   (load SECOND)",
+            "https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js (load THIRD — registers layout plugin)",
+            "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap",
+            "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css",
+            "https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js",
+        ],
+        "must": [
+            "Create `index.html` — one self-contained interactive diagram explorer",
+            "Load scripts in EXACT ORDER: dagre.min.js → cytoscape.min.js → cytoscape-dagre.js",
+            "Register plugin ONCE globally (not inside a function): `cytoscape.use(cytoscapeDagre);`",
+            "Each tab has its OWN `<div id='cy-{tabId}' style='width:100%;height:600px'>` container",
+            "Each tab initializes its OWN cytoscape() instance, stored in `cys[tabId]` — lazy init on first tab show",
+            "Dagre layout: `{name:'dagre', rankDir:'TB', nodeSep:50, rankSep:80, edgeSep:10, animate:false}`",
+            "Include >=4 diagram tabs: (1) Full Architecture/Pipeline, (2) Training, (3) Inference, (4) Key Concepts",
+            "ALL node detail data stored in element data: `{id, label, type, title, desc, section, code}`",
+            "Node click: `cy.on('tap','node', evt => showDetail(evt.target.id(), evt.target.data()))`",
+            "Export: 'Download SVG' → `cy.svg({scale:1,full:true,bg:'#09090b'})`, 'Download PNG' → `cy.png({full:true,scale:2,bg:'#09090b'})`",
+            "Search: `cy.nodes().forEach(n => n.style('opacity', matches ? 1 : 0.15))`",
+            "Walkthrough: step through node ID array with Next/Prev, `cy.center(node)` + `cy.select(node)` on each step",
+            "Cytoscape node style: shape=round-rectangle, border-width=2, text-wrap=wrap, text-max-width=120px, shadow-blur=8",
+            "Color coding via `node[type]` selector: input=#3b82f6, transform=#6366f1, decision=#f59e0b (diamond shape), output=#22c55e, loss=#ef4444, external=#8b5cf6, metric=#06b6d4",
+            "Compound/parent nodes for groups (encoder, decoder, etc.) — use `parent` key in element data",
+            "Dark theme: --bg:#09090b, --bg2:#111113, --border:#27272a — apply to page and as Cytoscape bg",
+            "KaTeX: load CSS+JS from CDN, call `renderMathInElement(detailPanel)` after updating detail panel",
+        ],
+        "forbidden": [
+            "Do NOT use Mermaid.js — Cytoscape.js only for this form",
+            "Do NOT use React Flow — requires build step",
+            "Do NOT share a Cytoscape <div> container between tabs — each tab needs its own",
+            "Do NOT init Cytoscape inside display:none — use visibility:hidden or init then hide",
+            "Do NOT call `cytoscape.use(cytoscapeDagre)` more than once — register once globally",
+            "Do NOT store detail data in a separate lookup dict — put it all in element `data()`",
+        ],
+        "quality_bar": "draw.io exported architecture diagram / Excalidraw",
     },
 
     "slides": {
@@ -204,7 +251,7 @@ FORM_SPECS: dict[str, dict] = {
             "Use `\\documentclass[aspectratio=169,11pt]{beamer}` for widescreen 16:9",
             "Theme: `\\usetheme{metropolis}` (lowercase, mandatory — this is standard in every TeX Live 2020+ installation)",
             "Color: `\\definecolor{accent}{HTML}{6366f1}` + `\\setbeamercolor{frametitle}{fg=white,bg=accent}`",
-            "Packages: `\\usepackage{amsmath,amssymb,tikz,booktabs,xcolor,hyperref,graphicx,colortbl,microtype}`",
+            "Packages: `\\usepackage{amsmath,amssymb,tikz,booktabs,xcolor,hyperref,graphicx,colortbl,microtype,textcomp}`",
             "Build >=12 frames: title, motivation, background x2, method x3, results x2, example, conclusion, Q&A",
             "Incremental reveals: `\\item<1->`, `\\item<2->` — never show all bullets at once on any frame",
             "All math in correct LaTeX: `$inline$` and `\\begin{equation}\\end{equation}` for display",
@@ -388,7 +435,21 @@ class BaseSkill(ABC):
         spec = FORM_SPECS.get(demo_form, {})
         main_file = spec.get("main_file", "app.py")
         quality_bar = spec.get("quality_bar", "production quality")
+        # Measure existing file sizes so the polish prompt can warn against regressions
+        import os as _os
+        file_sizes = {}
+        for gf in generated_files[:12]:
+            try:
+                sz = _os.path.getsize(_os.path.join(_os.path.dirname(__file__), '..', '..', gf)) if '/' not in gf else 0
+            except Exception:
+                sz = 0
+            file_sizes[gf] = sz
+
         return f"""You have generated: {', '.join(generated_files[:12])}
+
+⚠️ POLISH RULE — DO NOT REGRESS: If you rewrite a file, the new version MUST be at least as long
+as the original. A shorter rewrite means you deleted content. Fix bugs with targeted edits, not
+full rewrites. If a full rewrite is truly needed, every section from the original must be present.
 
 Run a thorough QUALITY REVIEW and fix everything you find.
 
@@ -417,6 +478,13 @@ STEP 4 — Final check:
   • Check all figures from figures/ directory are referenced in the output
   • Verify dark theme consistency — no white or near-white backgrounds anywhere
   • Check all interactive elements work: buttons respond, sliders update, links point somewhere valid
+
+STEP 5 — Paper content verification (MOST IMPORTANT):
+  • Search for the EXACT paper title "{paper.title or 'the paper'}" in {main_file}. If missing or wrong, add it to the title/header/hero section NOW.
+  • Verify authors are listed correctly: "{', '.join((paper.authors or [])[:5]) if paper.authors else 'See paper'}". If you see "[Author Name]" or generic placeholder names, replace them.
+  • Verify the venue/year is present: "{paper.venue or 'arXiv'} {paper.year or ''}". Add if missing.
+  • If the paper reports numerical results (accuracy, BLEU, F1, PSNR, etc.), verify those EXACT numbers appear in your output. Never use "~X%" or "approximately" — use the real numbers from the paper.
+  • If you see any Lorem Ipsum, "TODO", "INSERT HERE", "Example Result", or other placeholder content, replace it with real paper content immediately.
 
 Target quality: {quality_bar}
 Rewrite any file that needs significant changes. Make it genuinely impressive."""
@@ -468,6 +536,11 @@ Step 4 — Universal checks:
   • Verify dark theme consistency (no white backgrounds)
   • Check all interactive elements work (buttons, sliders, links)
 
+Step 5 — Paper title & content verification:
+  • Search presentation.tex for "{paper.title or 'the paper'}". If missing, add it to the title frame NOW.
+  • Authors "{', '.join((paper.authors or [])[:5]) if paper.authors else 'See paper'}" must appear on the title frame.
+  • All numeric results must be the REAL numbers from the paper, not "~X%" estimates.
+
 Fix everything found. Target: ICML oral talk quality Beamer slides."""
 
         elif demo_form == "slides":
@@ -500,6 +573,11 @@ Step 3 — Universal checks:
   • Verify dark theme consistency (no white backgrounds)
   • Check all interactive elements work (buttons, sliders, links)
 
+Step 4 — Paper title & content verification:
+  • Search build.py for "{paper.title or 'the paper'}". If missing or wrong, add it to the title slide NOW.
+  • Authors "{', '.join((paper.authors or [])[:5]) if paper.authors else 'See paper'}" must appear on the title slide.
+  • All numeric results must be the REAL numbers from the paper, not "~X%" estimates.
+
 Fix all issues. Target: NeurIPS oral presentation deck."""
 
         elif demo_form == "presentation":
@@ -526,6 +604,11 @@ Step 4 — Universal checks:
   • Check all figures from figures/ directory are referenced
   • Verify dark theme consistency (no white backgrounds)
   • Check all interactive elements work (buttons, fragments, links)
+
+Step 5 — Paper title & content verification:
+  • Search demo.html for "{paper.title or 'the paper'}". If missing, add it to the title slide NOW.
+  • Authors "{', '.join((paper.authors or [])[:5]) if paper.authors else 'See paper'}" must appear on the title slide.
+  • All numeric results must be the REAL numbers from the paper, not "~X%" estimates.
 
 Target: NeurIPS/ICML oral presentation slides."""
 
@@ -1116,14 +1199,20 @@ Step 4 ── REQUIREMENTS + DONE
   web_search         Use for PAPER-SPECIFIC info: official results, author list, GitHub repo
                      NOT for library basics already documented in this system prompt
   search_huggingface Use to find official models/datasets for the paper
-  extract_pdf_page   Render a PDF page (or cropped region) as PNG to embed in slides/demos
+  extract_pdf_page   Extract a page from the paper PDF as a high-quality figure
                      Required args: page (1-indexed integer)
-                     Optional: dpi (default 150), crop ({{x0,y0,x1,y1}} as 0.0–1.0 fractions), filename
-                     Examples:  extract_pdf_page(page=5)                  → full page 5
-                                extract_pdf_page(page=7, crop={{x0:0,y0:0.5,x1:1,y1:1}})  → bottom half of page 7
+                     Optional: format ("svg" default | "png"), dpi (PNG only, default 300),
+                               crop ({{x0,y0,x1,y1}} as 0.0–1.0 fractions), filename
+                     PREFER format="svg" for HTML/website/presentation — vector quality, scales infinitely
+                     Use format="png" only for python-pptx (add_picture) or LaTeX (\includegraphics)
+                     Examples:  extract_pdf_page(page=5)                              → SVG vector of page 5
+                                extract_pdf_page(page=5, format="png")                → 300dpi PNG of page 5
+                                extract_pdf_page(page=7, crop={{x0:0,y0:0.5,x1:1,y1:1}})  → cropped SVG
+                     Embed SVG in HTML: <img src="figures/page_5.svg"> OR inline the SVG content
                      Use this for: architecture diagrams, result tables, example figures from the paper
   download_file      Use to fetch images from URLs into the output directory
-                     For ML brand logos only: download_file url=https://cdn.simpleicons.org/pytorch/ffffff filename=assets/pytorch.svg
+                     For ML brand logos in HTML: use `<img src="https://cdn.simpleicons.org/{{slug}}/ffffff">` DIRECTLY — no download needed
+                     Only use download_file for logos in NON-HTML outputs (e.g. python-pptx, LaTeX)
                      For all other icons: use Font Awesome 6 CDN classes (zero downloads needed)
                      DO NOT search flaticon.com — it does not provide direct download URLs
   write_file         Use for every file you create (path relative to output dir)

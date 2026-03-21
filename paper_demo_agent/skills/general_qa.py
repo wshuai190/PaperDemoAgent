@@ -72,7 +72,25 @@ class GeneralQASkill(BaseSkill):
         # Form-specific guidance for non-app forms
         form_specific = self._form_specific_guidance(demo_form)
 
-        return f"""You are an expert at building intelligent paper exploration tools —
+        authors_str = ", ".join(paper.authors[:5]) if paper.authors else "See paper"
+        year_str = str(paper.year) if paper.year else "N/A"
+        venue_str = getattr(paper, "venue", None) or "arXiv"
+        arxiv_str = (getattr(paper, "arxiv_url", None) or
+                     (f"https://arxiv.org/abs/{paper.arxiv_id}" if getattr(paper, 'arxiv_id', None) else "N/A"))
+        paper_facts_block = (
+            f"━━ PAPER FACTS — ANCHOR (always use these exact values) ━━\n"
+            f"Title   : {paper.title}\n"
+            f"Authors : {authors_str}\n"
+            f"Year    : {year_str}\n"
+            f"Venue   : {venue_str}\n"
+            f"arXiv   : {arxiv_str}\n"
+            f"Core Contribution: {analysis.contribution or 'See abstract'}\n\n"
+            f"MANDATORY: The EXACT paper title above MUST appear in your output (in the header/title/hero).\n"
+            f"Use the EXACT author names above — never write \"[Author Name]\" placeholders.\n"
+            f"Use EXACT numbers from the paper — never write \"~X%\" or \"approximately\".\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        )
+        return paper_facts_block + f"""You are an expert at building intelligent paper exploration tools —
 combining the depth of a research assistant with the UX of Perplexity AI.
 Your demos make papers genuinely accessible to non-experts.
 
@@ -320,7 +338,20 @@ API KEY ONBOARDING (show this if no key found):
 3. Include pre-written answers to the most important questions about this paper
 4. Ensure all key results from the paper are accurately presented"""
 
-        return f"""Build a {demo_form} Q&A demo for: "{paper.title}"
+        authors_str = ", ".join(paper.authors[:5]) if paper.authors else "See paper"
+        year_str = str(paper.year) if paper.year else "N/A"
+        venue_str = getattr(paper, "venue", None) or "arXiv"
+        paper_anchor = (
+            f"══════════════════════════════════════════════════\n"
+            f"PAPER FACTS — USE THESE EXACT STRINGS IN OUTPUT\n"
+            f"══════════════════════════════════════════════════\n"
+            f"Title   : {paper.title}\n"
+            f"Authors : {authors_str}\n"
+            f"Year    : {year_str} | Venue: {venue_str}\n"
+            f"Core    : {analysis.contribution or 'See abstract below'}\n"
+            f"══════════════════════════════════════════════════\n\n"
+        )
+        return paper_anchor + f"""Build a {demo_form} Q&A demo for: "{paper.title}"
 
 Contribution: {analysis.contribution}
 Demo type: {demo_type}
