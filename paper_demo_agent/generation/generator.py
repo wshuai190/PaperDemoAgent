@@ -1125,10 +1125,13 @@ def _run_loop(
                 on_emit(f"  ↳ Compacted context: {before_len} → {len(messages)} messages\n")
 
         on_emit(f"  [{phase_label}iter {iteration + 1}] calling model...\n")
-        # Adaptive token budget: early build iterations are planning/searching
-        # (8 192 is plenty); later iterations write large files (need 16 384).
+        # Adaptive token budget: early iterations are planning/searching
+        # (8192 is plenty); later iterations write large files and need headroom.
+        # Sonnet's max output is 64K tokens; we use 32K for write-heavy iterations.
         if is_build and iteration < 2:
             _max_tokens = 8192
+        elif is_build and iteration >= 5:
+            _max_tokens = 32768  # write-heavy: need room for 500+ line files
         else:
             _max_tokens = 16384
         response = _chat_with_retry(
