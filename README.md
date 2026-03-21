@@ -13,16 +13,16 @@
 
 ![Paper Demo Agent UI](docs/assets/ui-screenshot.svg)
 
-[Quick Start](#quick-start) | [What's In 0.3.2](#whats-new-in-v032) | [Forms](#forms-and-subtypes) | [Providers](#supported-providers) | [CLI](#cli-reference) | [UI](#web-ui) | [Python API](#python-api)
+[Quick Start](#quick-start) | [What's In 0.3.3](#whats-new-in-v033) | [Forms](#forms-and-subtypes) | [Providers](#supported-providers) | [CLI](#cli-reference) | [UI](#web-ui) | [Python API](#python-api)
 
 </div>
 
 ---
 
-## What's New in v0.3.2
+## What's New in v0.3.3
 
 - README and UI copy now match the current category/subtype model used by the CLI and agent.
-- Version bumped to `0.3.2`.
+- Version bumped to `0.3.3`.
 - Docs now reflect the current zero-config auth paths: Claude Code, Gemini CLI, `gcloud` ADC, OpenAI Codex CLI, and Aider.
 - README now documents the current generation stack: 13 routed skills, 15 generation tools, the graphics toolkit, and PDF figure/table extraction utilities.
 

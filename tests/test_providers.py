@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 from paper_demo_agent.providers.base import BaseLLMProvider, LLMResponse, ToolCall
 from paper_demo_agent.providers.factory import create_provider, list_providers, PROVIDER_DEFAULTS
 from paper_demo_agent.providers.gemini_provider import GeminiProvider
+from paper_demo_agent.providers.openai_provider import OpenAIProvider
 
 
 class TestToolCall:
@@ -410,3 +411,63 @@ class TestGeminiProvider:
         assert response.stop_reason == "tool_use"
         assert len(response.tool_calls) == 1
         assert response.tool_calls[0].metadata == {"thoughtSignature": "sig-123"}
+
+
+class TestOpenAIProvider:
+    def test_chat_clamps_gpt_4o_mini_max_tokens(self, monkeypatch):
+        provider = OpenAIProvider(api_key="fake-key", model="gpt-4o-mini")
+        captured = {}
+
+        class DummyCompletions:
+            def create(self, **kwargs):
+                captured.update(kwargs)
+                message = MagicMock(content="done", tool_calls=None)
+                choice = MagicMock(message=message, finish_reason="stop")
+                return MagicMock(choices=[choice])
+
+        class DummyChat:
+            completions = DummyCompletions()
+
+        class DummyClient:
+            chat = DummyChat()
+
+        monkeypatch.setattr(provider, "_client", lambda: DummyClient())
+
+        response = provider.chat(
+            messages=[{"role": "user", "content": "hello"}],
+            max_tokens=32768,
+        )
+
+        assert response.content == "done"
+        assert captured["model"] == "gpt-4o-mini"
+        assert captured["max_tokens"] == 16384
+        assert "max_completion_tokens" not in captured
+
+    def test_chat_uses_completion_tokens_for_gpt_5(self, monkeypatch):
+        provider = OpenAIProvider(api_key="fake-key", model="gpt-5.2")
+        captured = {}
+
+        class DummyCompletions:
+            def create(self, **kwargs):
+                captured.update(kwargs)
+                message = MagicMock(content="done", tool_calls=None)
+                choice = MagicMock(message=message, finish_reason="stop")
+                return MagicMock(choices=[choice])
+
+        class DummyChat:
+            completions = DummyCompletions()
+
+        class DummyClient:
+            chat = DummyChat()
+
+        monkeypatch.setattr(provider, "_client", lambda: DummyClient())
+
+        response = provider.chat(
+            messages=[{"role": "user", "content": "hello"}],
+            max_tokens=8192,
+        )
+
+        assert response.content == "done"
+        assert captured["model"] == "gpt-5.2"
+        assert captured["max_completion_tokens"] == 16384
+        assert "max_tokens" not in captured

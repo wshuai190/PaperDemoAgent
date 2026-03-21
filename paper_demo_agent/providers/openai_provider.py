@@ -9,6 +9,13 @@ from paper_demo_agent.providers.base import BaseLLMProvider, LLMResponse, ToolCa
 class OpenAIProvider(BaseLLMProvider):
     """LLM provider for OpenAI GPT models."""
 
+    # Known chat-completions output caps for non-reasoning models that reject
+    # larger max_tokens values during write-heavy build iterations.
+    _MAX_OUTPUT_TOKENS = {
+        "gpt-4o": 16384,
+        "gpt-4o-mini": 16384,
+    }
+
     MODELS = [
         "gpt-5.2", "gpt-5.2-pro",
         "gpt-5.1", "gpt-5",
@@ -127,7 +134,7 @@ class OpenAIProvider(BaseLLMProvider):
         # gpt-5 and o-series models use max_completion_tokens instead of max_tokens.
         # They also need a larger budget since reasoning tokens count against the limit.
         token_key = "max_completion_tokens" if self._uses_completion_tokens() else "max_tokens"
-        token_val = max(max_tokens, 16384) if self._uses_completion_tokens() else max_tokens
+        token_val = self._effective_token_budget(max_tokens)
         kwargs = dict(model=self.model, messages=msgs, **{token_key: token_val})
         if tools:
             kwargs["tools"] = self._convert_tools(tools)
@@ -140,6 +147,16 @@ class OpenAIProvider(BaseLLMProvider):
         """Return True for models that require max_completion_tokens instead of max_tokens."""
         m = self.model.lower()
         return m.startswith("o1") or m.startswith("o3") or m.startswith("o4") or m.startswith("gpt-5")
+
+    def _effective_token_budget(self, requested_max_tokens: int) -> int:
+        """Clamp token budget to what the selected model actually accepts."""
+        if self._uses_completion_tokens():
+            return max(requested_max_tokens, 16384)
+        model_name = self.model.lower()
+        cap = self._MAX_OUTPUT_TOKENS.get(model_name)
+        if cap is not None:
+            return min(requested_max_tokens, cap)
+        return requested_max_tokens
 
     def stream_chat(
         self,
@@ -155,7 +172,7 @@ class OpenAIProvider(BaseLLMProvider):
         msgs.extend(messages)
 
         token_key = "max_completion_tokens" if self._uses_completion_tokens() else "max_tokens"
-        token_val = max(max_tokens, 16384) if self._uses_completion_tokens() else max_tokens
+        token_val = self._effective_token_budget(max_tokens)
         kwargs = dict(model=self.model, messages=msgs, **{token_key: token_val}, stream=True)
         if tools:
             kwargs["tools"] = self._convert_tools(tools)
